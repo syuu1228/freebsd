@@ -1320,6 +1320,9 @@ vmx_exit_process(struct vmx *vmx, int vcpu, struct vm_exit *vmexit)
 			vmexit->u.paging.gpa = gpa;
 		}
 		break;
+	case EXIT_REASON_VMCALL:
+		vmexit->exitcode = VM_EXITCODE_HYPERCALL;
+		break;
 	default:
 		break;
 	}
@@ -1798,10 +1801,22 @@ vmx_setcap(void *arg, int vcpu, int type, int val)
 		break;
 	case VM_CAP_UNRESTRICTED_GUEST:
 		if (cap_unrestricted_guest) {
+			uint64_t ctls;
+
 			retval = 0;
 			baseval = procbased_ctls2;
 			flag = PROCBASED2_UNRESTRICTED_GUEST;
 			reg = VMCS_SEC_PROC_BASED_CTLS;
+			error = vmcs_getreg(vmcs,
+				    VMCS_IDENT(VMCS_ENTRY_CTLS), &ctls);
+			if (error == 0) {
+				ctls &= ~(VM_ENTRY_LOAD_EFER | VM_ENTRY_GUEST_LMA);
+				vmcs_setreg(vmcs,
+				    	VMCS_IDENT(VMCS_ENTRY_CTLS), ctls);
+			}else{
+				printf("%s vmcs_getreg returns %d\n",
+					__func__, error);
+			}
 		}
 		break;
 	default:
@@ -1860,6 +1875,27 @@ vmx_setexcbitmap(void *arg, int vcpu, uint32_t bits)
 	return (error);
 }
 
+static int
+vmx_enablebs(void *arg, int vcpu)
+{
+	int error;
+	struct vmx *vmx = arg;
+
+	/*
+	 * If the vcpu is running then don't mess with the VMCS.
+	 *
+	 * vmcs_setexcbitmap will VMCLEAR the vmcs when it is done which will cause
+	 * the subsequent vmlaunch/vmresume to fail.
+	 */
+	if (vcpu_is_running(vmx->vm, vcpu))
+		panic("vmx_enablebs: %s%d is running", vm_name(vmx->vm), vcpu);
+
+	error = vmcs_enablebs(&vmx->vmcs[vcpu]);
+
+	return (error);
+}
+
+
 struct vmm_ops vmm_ops_intel = {
 	vmx_init,
 	vmx_cleanup,
@@ -1875,5 +1911,6 @@ struct vmm_ops vmm_ops_intel = {
 	vmx_inject,
 	vmx_getcap,
 	vmx_setcap,
-	vmx_setexcbitmap
+	vmx_setexcbitmap,
+	vmx_enablebs,
 };
