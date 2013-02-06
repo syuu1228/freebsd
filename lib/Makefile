@@ -116,6 +116,7 @@ SUBDIR=	${SUBDIR_ORDERED} \
 	${_libusb} \
 	${_libvgl} \
 	${_libvmmapi} \
+	${_libbiosemul} \
 	libwrap \
 	liby \
 	libz \
@@ -206,6 +207,7 @@ _librtld_db=	librtld_db
 
 .if ${MACHINE_CPUARCH} == "amd64"
 _libvmmapi=	libvmmapi
+_libbiosemul=	libbiosemul
 .endif
 
 .if ${MACHINE_CPUARCH} == "ia64"
