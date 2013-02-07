@@ -413,7 +413,7 @@ outsx(regcontext_t *REGS, int port)
 
 bool io_port_defined(int in, int port)
 {
-	if ((port < MINPORT) && (port > MAXPORT))
+	if ((port < MINPORT) || (port > MAXPORT))
 		return false;
 
 	if (in)

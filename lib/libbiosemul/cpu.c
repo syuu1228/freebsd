@@ -27,7 +27,12 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD: projects/doscmd/cpu.c,v 1.8 2002/05/10 10:37:57 tg Exp $");
 
+#include <sys/types.h>
+#include <machine/vmm.h>
+#include <machine/specialreg.h>
+#include <vmmapi.h>
 #include "doscmd.h"
+#include <udis86/udis86.h>
 #include "video.h"
 
 static u_int32_t	decode_modrm(u_int8_t *, u_int16_t,
@@ -51,10 +56,50 @@ int00(regcontext_t *REGS __unused)
     exit(1);
 }
 
+extern char		*lomem_addr;
+
 void
-int01(regcontext_t *REGS __unused)
+int01(regcontext_t *REGS)
 {
-    debug(D_ALWAYS, "INT 1 with no handler! (single-step/debug)\n");
+	ud_t ud_obj;
+
+	ud_init(&ud_obj);
+	ud_set_syntax(&ud_obj, UD_SYN_ATT);
+	ud_set_vendor(&ud_obj, UD_VENDOR_INTEL);
+
+	if (R_CR0 & CR0_PE) {
+		u_int32_t *sp, eip, eflags;
+	
+		sp = (uint32_t *)(lomem_addr + R_ESP);
+		eip = *sp;
+		--sp; /* CS */
+		--sp; /* EFLAGS */
+		eflags = *sp;
+		*sp |= 0x100;
+		ud_set_mode(&ud_obj, 32);
+		ud_set_pc(&ud_obj, eip);
+		ud_set_input_buffer(&ud_obj, lomem_addr + eip, 16);
+	
+		fprintf(stderr, "[trace] 32bit eip:%x eflags:%x", eip, eflags);
+	}else{
+		u_int16_t *sp, eip, eflags;
+	
+		sp = (uint16_t *)(lomem_addr + R_ESP);
+		eip = *sp;
+		--sp; /* CS */
+		--sp; /* EFLAGS */
+		eflags = *sp;
+		*sp |= 0x100;
+		ud_set_mode(&ud_obj, 16);
+		ud_set_pc(&ud_obj, eip);
+		ud_set_input_buffer(&ud_obj, lomem_addr + eip, 16);
+	
+		fprintf(stderr, "[trace] 16bit eip:%x eflags:%x", eip, eflags);
+	}
+	ud_disassemble(&ud_obj);
+	fprintf(stderr, " insn:%s", ud_insn_asm(&ud_obj));
+	fprintf(stderr, " eax:%x ebx:%x ecx:%x edx:%x\n",
+			R_EAX, R_EBX, R_ECX, R_EDX);
 }
 
 void
@@ -69,6 +114,7 @@ int0d(regcontext_t *REGS __unused)
     debug(D_ALWAYS, "IRQ5 with no handler!\n");
 }
 
+u_int32_t vec01;
 void
 cpu_init(void)
 {
@@ -78,9 +124,9 @@ cpu_init(void)
     ivec[0x00] = vec;
     register_callback(vec, int00, "int 00");
 
-    vec = insert_softint_trampoline();
-    ivec[0x01] = vec;
-    register_callback(vec, int01, "int 01");
+    vec01 = insert_hardint_trampoline();
+    ivec[0x01] = vec01;
+    register_callback(vec01, int01, "int 01");
 
     vec = insert_softint_trampoline();
     ivec[0x03] = vec;

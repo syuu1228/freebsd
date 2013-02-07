@@ -105,6 +105,7 @@ static const int BSP = 0;
 static int cpumask;
 
 static int bios_mode;
+static int trace_mode;
 
 static void vm_loop(struct vmctx *ctx, int vcpu, uint64_t rip);
 
@@ -133,7 +134,7 @@ usage(int code)
 {
 
         fprintf(stderr,
-                "Usage: %s [-aehABHIPE][-g <gdb port>][-z <hz>][-s <pci>]"
+                "Usage: %s [-aehABHIPET][-g <gdb port>][-z <hz>][-s <pci>]"
 		"[-S <pci>][-p pincpu][-n <pci>][-m lowmem][-M highmem]"
 		" <vmname>\n"
 		"       -a: local apic is in XAPIC mode (default is X2APIC)\n"
@@ -146,6 +147,7 @@ usage(int code)
 		"       -I: present an ioapic to the guest\n"
 		"       -P: vmexit from the guest on pause\n"
 		"	-E: enable BIOS emulation\n"
+		"	-T: Trace mode\n"
 		"	-e: exit on unhandled i/o access\n"
 		"       -h: help\n"
 		"       -z: guest hz (default is %d)\n"
@@ -331,6 +333,18 @@ vmexit_inout(struct vmctx *ctx, struct vm_exit *vme, int *pvcpu)
 	if (error == 0 && in)
 		error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RAX, eax);
 
+#if 0
+ 	if (trace_mode) {
+ 		uint64_t rflags;
+ 
+ 		error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, &rflags);
+ 		assert(error == 0);
+ 		rflags |= 0x100; /* Trap Flag */
+ 		error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, rflags);
+ 		assert(error == 0);
+ 	}
+#endif
+
 	if (error == 0)
 		return (VMEXIT_CONTINUE);
 	else {
@@ -483,11 +497,11 @@ vmexit_paging(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 static int
 vmexit_hypercall(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 {
+	int intno = (vmexit->rip - 0x400) / 0x4;
 #if 0
 	uint64_t rflags;
 	int error;
 #endif
-	int intno = (vmexit->rip - 0x400) / 0x4;
 
 	if (!bios_mode) {
 		fprintf(stderr, "Failed to handle hypercall at 0x%lx\n", 
@@ -495,20 +509,20 @@ vmexit_hypercall(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 		return (VMEXIT_ABORT);
 	}
 
-	if (biosemul_call(ctx, *pvcpu, intno) != 0) {
+	if (biosemul_call(ctx, *pvcpu) != 0) {
 		fprintf(stderr, "Failed to emulate INT %x at 0x%lx\n", 
 			intno, vmexit->rip);
 		return (VMEXIT_ABORT);
 	}
-
 #if 0
-	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RFLAGS, &rflags);
-	assert(error == 0);
-	rflags |= 0x100; /* Trap Flag */
-	error = vm_set_register(ctx, *pvcpu, VM_REG_GUEST_RFLAGS, rflags);
-	assert(error == 0);
+	if (intno != 0x01) {
+		error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RFLAGS, &rflags);
+		assert(error == 0);
+		rflags |= 0x100; /* Trap Flag */
+		error = vm_set_register(ctx, *pvcpu, VM_REG_GUEST_RFLAGS, rflags);
+		assert(error == 0);
+	}
 #endif
-
 	return (VMEXIT_CONTINUE);
 }
 
@@ -646,7 +660,7 @@ main(int argc, char *argv[])
 	guest_ncpus = 1;
 	ioapic = 0;
 
-	while ((c = getopt(argc, argv, "abehABHIPxEp:g:c:z:s:S:n:m:M:")) != -1) {
+	while ((c = getopt(argc, argv, "abehABHIPxETp:g:c:z:s:S:n:m:M:")) != -1) {
 		switch (c) {
 		case 'a':
 			disable_x2apic = 1;
@@ -704,6 +718,9 @@ main(int argc, char *argv[])
 			break;
 		case 'E':
 			bios_mode = 1;
+			break;
+		case 'T':
+			trace_mode = 1;
 			break;
 		case 'h':
 			usage(0);			
@@ -791,8 +808,10 @@ main(int argc, char *argv[])
 
 	if (bios_mode != 0) {
 		vm_set_capability(ctx, BSP, VM_CAP_UNRESTRICTED_GUEST, 1);
-		error = biosemul_init(ctx, 0, lomem_addr);
-		assert(error == 0);
+		biosemul_init(ctx, 0, lomem_addr, trace_mode);
+	} else if (trace_mode != 0) {
+		fprintf(stderr, "Trace mode only works with BIOS emulation mode\n");
+		return (-1);
 	}
 
 	init_inout();

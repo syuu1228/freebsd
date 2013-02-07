@@ -57,6 +57,7 @@ __FBSDID("$FreeBSD: projects/doscmd/doscmd.c,v 1.25 2002/03/07 12:52:26 obrien E
 #endif
 #include <machine/vmm.h>
 #include <vmmapi.h>
+#include <assert.h>
 
 #include "doscmd.h"
 #include "tty.h"
@@ -120,10 +121,13 @@ static int get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs);
 #define HDISK_FILE "/home/syuu/freebsd.img"
 
 regcontext_t *saved_regcontext;
+int trace_mode;
 
 /* lobotomise */
-int biosemul_init(struct vmctx *ctx, int vcpu, char *lomem)
+void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace)
 {
+    int error;
+
     lomem_addr = lomem;
     ivec = (u_int32_t *)lomem_addr;
 
@@ -138,8 +142,8 @@ int biosemul_init(struct vmctx *ctx, int vcpu, char *lomem)
     init_io_port_handlers();
     bios_init();
     init_hdisk(2, HDISK_CYL, HDISK_HEAD, HDISK_TRACK, HDISK_FILE, NULL);
-    if (try_boot(booting = 2) < 0)	/* try C: */
-	return -1;
+    error = try_boot(booting = 2);	/* try C: */
+    assert(error >= 0);
     cpu_init();
     kbd_init();
     kbd_bios_init();
@@ -157,7 +161,17 @@ int biosemul_init(struct vmctx *ctx, int vcpu, char *lomem)
 #if 0
     gettimeofday(&boot_time, 0);
 #endif
-    return 0;
+ 
+ 	trace_mode = trace;
+ 	if (trace_mode) {
+ 		uint64_t rflags;
+ 
+ 		error = vm_get_register(ctx, 0, VM_REG_GUEST_RFLAGS, &rflags);
+ 		assert(error == 0);
+ 		rflags |= 0x100; /* Trap Flag */
+ 		error = vm_set_register(ctx, 0, VM_REG_GUEST_RFLAGS, rflags);
+ 		assert(error == 0);
+ 	}
 }
 
 #if 0
@@ -838,6 +852,9 @@ get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs)
 
 	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, &regs->r.efl.r_rx)) != 0)
 		goto done;
+
+	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_CR0, &regs->r.cr0.r_rx)) != 0)
+		goto done;
 done:
 	return (error);
 }
@@ -933,8 +950,9 @@ done:
 
 extern void int13(regcontext_t *REGS);
 
+extern u_int32_t vec01;
 int
-biosemul_call(struct vmctx *ctx, int vcpu, int intno)
+biosemul_call(struct vmctx *ctx, int vcpu)
 {
 	int ret = 0;
 	regcontext_t orig, modified;
@@ -992,6 +1010,8 @@ biosemul_call(struct vmctx *ctx, int vcpu, int intno)
 	if (func)
 		func(&modified);
 
+	if (trace_mode && MAKEVEC(R_CS, R_IP) != vec01)
+		R_EFLAGS |= 0x100;
 	set_modified_regs(ctx, vcpu, &orig, &modified);
 
 	return (ret);
@@ -1010,9 +1030,6 @@ int biosemul_inout(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 	get_all_regs(ctx, vcpu, &orig);
 	modified = orig;
 	saved_regcontext = &modified;
-
-	fprintf(stderr, "%s in:%d port:%x bytes:%d eax:%x strict:%d\n",
-		__func__, in, port, bytes, *eax, strict);
 
 	if (in)
 		inb(&modified, port);

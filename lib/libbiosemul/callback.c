@@ -43,6 +43,7 @@ register_callback(u_int32_t vec, callback_t func, const char *name)
 /*
 ** Find a handler for (vec)
 */
+extern u_int32_t vec01;
 callback_t
 find_callback(u_int32_t vec)
 {
@@ -54,7 +55,8 @@ find_callback(u_int32_t vec)
 	if (elm->vec == vec)
 	    break;
     if (elm) {
-	debug(D_TRAPS2, "callback %s\n", elm->name);
+	if (vec != vec01)
+		debug(D_TRAPS2, "callback %s\n", elm->name);
 	return (elm->func);
     } else
 	return ((callback_t)0);

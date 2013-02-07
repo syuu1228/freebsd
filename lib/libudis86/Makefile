@@ -5,6 +5,7 @@
 LIB=	udis86
 WARNS?=	2
 SRCS=	itab.c input.c decode.c syn.c syn-intel.c syn-att.c udis86.c
-INCS=	udis86.h
+INCS=	udis86.h types.h extern.h itab.h
+INCSDIR= ${INCLUDEDIR}/udis86
 
 .include <bsd.lib.mk>
