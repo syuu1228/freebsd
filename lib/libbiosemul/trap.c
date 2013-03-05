@@ -129,8 +129,10 @@ fake_int(regcontext_t *REGS, int intnum)
      * INT 21:3E is a close(), which seems like something one would
      * not sit on for ever, so we will allow it to reset our POLL count.
      */
+#if 0
     if (intnum == 0x21 && R_AX == 0x3E)
 	reset_poll();
+#endif
 
     /* stack for and call the interrupt in vm86 space */
     PUSH((R_FLAGS & ~PSL_I) | (R_EFLAGS & PSL_VIF ? PSL_I : 0), REGS);

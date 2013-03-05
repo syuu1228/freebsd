@@ -7,9 +7,9 @@ WARNS?=	2
 SRCS=	biosemul.c \
 	bios.c callback.c cpu.c \
 	debug.c i386-pinsn.c \
-	int.c int10.c int13.c int16.c \
-	mouse.c port.c trap.c \
-	tty.c video.c ${FONTHDRS}
+	int10.c int13.c int14.c int16.c \
+	port.c trap.c \
+	${FONTHDRS}
 INCS=	biosemul.h
 CFLAGS+=	-I. -DDISASSEMBLER
 FONTFILES=	cp437-8x8.pcf.gz cp437-8x14.pcf.gz cp437-8x16.pcf.gz

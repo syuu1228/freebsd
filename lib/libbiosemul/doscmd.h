@@ -201,6 +201,7 @@ extern void	emuint(regcontext_t *REGS);
 extern int	i386dis(unsigned short, unsigned short,
     unsigned char *, char *, int);
 
+#if 0
 /* int.c */
 void	init_ints(void);
 int	isinhardint(int);
@@ -210,6 +211,7 @@ void	resume_interrupt(void);
 void	unpend(int);
 void	send_eoi(void);
 void	set_eoir(int, void (*)(void *), void *);
+#endif
 
 /* int10.c */
 extern void	int10(regcontext_t *);
@@ -281,9 +283,7 @@ extern short	getver(char *);
 
 /* signal.c */
 extern struct sigframe	*saved_sigframe;
-#endif
 extern regcontext_t	*saved_regcontext;
-#if 0
 extern int		saved_valid;
 extern void		setsignal(int s, void (*h)(struct sigframe *));
 #endif

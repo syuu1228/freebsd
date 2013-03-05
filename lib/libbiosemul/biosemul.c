@@ -62,6 +62,7 @@ __FBSDID("$FreeBSD: projects/doscmd/doscmd.c,v 1.25 2002/03/07 12:52:26 obrien E
 #include "doscmd.h"
 #include "tty.h"
 #include "video.h"
+#include "com.h"
 
 /* exports */
 int		capture_fd = -1;
@@ -69,7 +70,7 @@ int		dead = 0;
 int		xmode = 0;
 int		quietmode = 0;
 int		booting = 0;
-int		raw_kbd = 1;
+int		raw_kbd = 0;
 int		timer_disable = 0;
 struct timeval	boot_time;
 u_int32_t	*ivec;
@@ -115,8 +116,8 @@ static struct vm86_init_args kargs;
 static int set_modified_regs(struct vmctx *ctx, int vcpu, regcontext_t *orig, regcontext_t *modified);
 static int get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs);
 
-#define HDISK_CYL 1023
-#define HDISK_HEAD 254
+#define HDISK_CYL 1305
+#define HDISK_HEAD 255
 #define HDISK_TRACK 63
 #define HDISK_FILE "/home/syuu/freebsd.img"
 
@@ -131,32 +132,37 @@ void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace)
     lomem_addr = lomem;
     ivec = (u_int32_t *)lomem_addr;
 
-    init_ints();
+//    init_ints();
 
     debugf = stderr;
 //    debugf = fopen("biosemul.log", "w");
 
     /* Call init functions */
+#if 0
     if (raw_kbd)
 	console_init();
+#endif
     init_io_port_handlers();
     bios_init();
     init_hdisk(2, HDISK_CYL, HDISK_HEAD, HDISK_TRACK, HDISK_FILE, NULL);
     error = try_boot(booting = 2);	/* try C: */
     assert(error >= 0);
     cpu_init();
+#if 0
     kbd_init();
     kbd_bios_init();
     video_init();
     if (xmode || quietmode)
 	mouse_init();
     video_bios_init();
+#endif
     disk_bios_init();
 #if 0
     cmos_init();
     timer_init();
 #endif
     /* iomap_init(); */
+    init_com(0, NULL, 0x3f8, 4);
 
 #if 0
     gettimeofday(&boot_time, 0);

@@ -589,7 +589,9 @@ int13(regcontext_t *REGS)
     int side;
     int drive;
     
+#if 0
     reset_poll();
+#endif
 
     R_FLAGS &= ~PSL_C;
 
@@ -874,6 +876,9 @@ int13(regcontext_t *REGS)
 	}
 	/* XXX incomplete? */
 	break;
+
+    case 0x41:
+        
 
     default:
 	unknown_int2(0x13, R_AH, REGS);

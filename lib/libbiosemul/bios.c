@@ -81,6 +81,7 @@ int		 ndisks = 0;
 int		 nserial = 0;
 int		 nparallel = 0;
 u_int32_t	 rom_config;
+int nmice = 0;
 
 /*
 ** BIOS equipment list
@@ -267,7 +268,9 @@ bios_init(void)
     jtab++;
 #endif
 
+#if 0
     mouse_area = jtab;
+#endif
     jtab += 0x10;
 
     *(u_short *)&BIOSDATA[0x10] = 

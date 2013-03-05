@@ -36,34 +36,46 @@ __FBSDID("$FreeBSD: projects/doscmd/int10.c,v 1.8 2002/03/07 12:52:27 obrien Exp
 #include <unistd.h>
 
 #include "doscmd.h"
+#if 0
 #include "mouse.h"
 #include "tty.h"
 #include "video.h"
+#endif
 
+#if 0
 static int cursoremu = 1;
+#endif
 
 void
 int10(regcontext_t *REGS)
 {
 	char *addr;
+#if 0
 	int i, j;
 	int saved_row, saved_col;
+#endif
+	int i;
 
     	debug(D_DISK, "%s:%d AH:%x AL:%x FLAGS:%x\n", __func__, __LINE__, R_AH, R_AL, R_FLAGS);
 	/*
 	 * Any call to the video BIOS is enough to reset the poll
 	 * count on the keyboard.
 	 */
+#if 0
 	reset_poll();
+#endif
 
 	switch (R_AH) {
 	case 0x00:		/* Set display mode */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		init_mode(R_AL);
+#endif
 		break;
 	case 0x01:		/* Define cursor */
 	{
+#if 0
 		int start, end;
 		
 		start = R_CH;
@@ -92,14 +104,18 @@ int10(regcontext_t *REGS)
 		}
  out:		CursStart = start;
 		CursEnd = end;
+#endif
 		break;
 	}
 	case 0x02:		/* Position cursor */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		tty_move(R_DH, R_DL);
+#endif
 		break;
 	case 0x03:		/* Read cursor position */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		tty_report(&i, &j);
@@ -107,11 +123,17 @@ int10(regcontext_t *REGS)
 		R_DL = j;
 		R_CH = CursStart;
 		R_CL = CursEnd;
+#endif
+		R_DH = 0;
+		R_DL = 0;
+		R_CH = 0;
+		R_CL = 0;
 		break;
 	case 0x05:
 		debug(D_VIDEO, "Select current display page %d\n", R_AL);
 		break;
 	case 0x06:		/* initialize window/scroll text upward */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		if (R_AL == 0)		/* clear screen */
@@ -119,37 +141,54 @@ int10(regcontext_t *REGS)
 		tty_scroll(R_CH, R_CL,
 		    R_DH, R_DL,
 		    R_AL, R_BH << 8);
+#endif
 		break;
 	case 0x07:		/* initialize window/scroll text downward */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		if (R_AL == 0)		/* clear screen */
 			R_AL = DpyRows + 1;
+		if (!(xmode || quietmode))
 		tty_rscroll(R_CH, R_CL,
 		    R_DH, R_DL,
 		    R_AL, R_BH << 8);
+#endif
 		break;
 	case 0x08:		/* read character/attribute */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		i = tty_char(-1, -1);
+#endif
+		i = 0;
 		R_AX = i;
 		break;
 	case 0x09:		/* write character/attribute */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		tty_rwrite(R_CX, R_AL, R_BL << 8);
 		break;
+#endif
 	case 0x0a:		/* write character */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
+#endif
 		debug(D_HALF, "Int 10:0a: Write char: %02x\n", R_AL);
+#if 0
 		tty_rwrite(R_CX, R_AL, -1);
+#endif
+		for (i = R_CX; i > 0; i--)
+			putc(0xff & R_AL, stdout);
 		break;
 	case 0x0b:		/* set border color */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		video_setborder(R_BL);
+#endif
 		break;
 	case 0x0c:		/* write graphics pixel */
 		debug(D_VIDEO, "Write graphics pixel at %d, %d\n", R_CX, R_DX);
@@ -159,19 +198,27 @@ int10(regcontext_t *REGS)
 		break;
 	case 0x0e:		/* write character */
 #if 0
+#if 0
 		tty_write(R_AL, -1);
 #endif
 		tty_write(R_AL, TTYF_REDIRECT);
+#endif
+		putc(0xff & R_AL, stdout);
 		break;
 	case 0x0f:		/* get current video mode */
+#if 0
 		R_AH = DpyCols;		/* number of columns */
 		R_AL = VideoMode;	/* active mode */
+#endif
 		R_BH = 0;/*ActivePage *//* display page */
 		break;
 	case 0x10:
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
+#endif
 		switch (R_AL) {
+#if 0
 		case 0x00:		/* Set single palette register */
 			palette[R_BL] = R_BH;
 			update_pixels();
@@ -256,6 +303,7 @@ int10(regcontext_t *REGS)
 		case 0x1b:		/* Perform gray-scale summing */
 			debug(D_HALF, "Perform gray-scale summing\n");
 			break;
+#endif
 		default:
 			unknown_int3(0x10, 0x10, R_AL, REGS);
 			break;
@@ -325,8 +373,10 @@ int10(regcontext_t *REGS)
 		case 0x30:	/* Get font information */
 			debug(D_VIDEO,
 			    "INT 10 11:30 Request font address %02x\n", R_BH);
+#if 0
 			R_CX = CharHeight;
 			R_DL = DpyRows;
+#endif
 			switch(R_BH) {
 			case 0:
 				PUTVEC(R_ES, R_BP, ivec[0x1f]);
@@ -354,6 +404,7 @@ int10(regcontext_t *REGS)
 		}
 		break;
 	case 0x12:		/* Alternate function select */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
 		switch (R_BL) {
@@ -374,25 +425,35 @@ int10(regcontext_t *REGS)
 			unknown_int3(0x10, 0x12, R_BL, REGS);
 			break;
 		}
+#endif
 		break;
 	case 0x13: /* write character string */
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
+#endif
                 addr = (char *)(lomem_addr + MAKEPTR(R_ES, R_BP));
 		switch (R_AL & 0x03) {
 		case 0:
+#if 0
 			tty_report(&saved_row, &saved_col);
 			tty_move(R_DH, R_DL);
 			for (i = 0; i < R_CX; ++i)
 				tty_write(*addr++, R_BL << 8);
 			tty_move(saved_row, saved_col);
 			break;
+#endif
 		case 1:
+#if 0
 			tty_move(R_DH, R_DL);
 			for (i = 0; i < R_CX; ++i)
 				tty_write(*addr++, R_BL << 8);
+#endif
+			for (i = 0; i < R_CX; ++i)
+				putc(0xff & *addr++, stdout);
 			break;
 		case 2:
+#if 0
 			tty_report(&saved_row, &saved_col);
 			tty_move(R_DH, R_DL);
 			for (i = 0; i < R_CX; ++i) {
@@ -401,28 +462,39 @@ int10(regcontext_t *REGS)
 			}
 			tty_move(saved_row, saved_col);
 			break;
+#endif
 		case 3:
+#if 0
 			tty_move(R_DH, R_DL);
 			for (i = 0; i < R_CX; ++i) {
 				tty_write(addr[0], addr[1]);
+				addr += 2;
+			}
+#endif
+			for (i = 0; i < R_CX; ++i) {
+				putc(0xff & addr[0], stdout);
 				addr += 2;
 			}
 			break;
 		}
 		break;
 	case 0x1a:
+#if 0
 		if (!(xmode || quietmode))
 			goto unsupported;
+#endif
 		R_AL = 0x1a;		/* I am VGA */
 		R_BL = 8;		/* Color VGA */
 		R_BH = 0;		/* No other card */
 		break;
 	case 0x1b:	/* Video Functionality/State information */
+#if 0
 		if (R_BX == 0) {
 			addr = (char *)(lomem_addr + MAKEPTR(R_ES, R_DI));
 			memcpy(addr, vga_status, 64);
 			R_AL = 0x1b;
 		}
+#endif
 		break;
 	case 0x1c:	/* Save/Restore video state */
 		debug(D_VIDEO, "VGA: Save/restore video state\n");
@@ -449,18 +521,22 @@ int10(regcontext_t *REGS)
 	case 0xfe:	/* Get video buffer */
 		break;
 	case 0xfa:	/* Interrogate mouse driver */
+#if 0
 		if (xmode)
 			PUTPTR(R_ES, R_BX, (long)mouse_area);
+#endif
 		break;
     	case 0xff:	/* Update real screen from video buffer */
 		/* XXX - we should allow secondary buffer here and then
 			 update it as the user requests. */
 		break;
+#if 0
     	unsupported:
 		if (vflag)
 			dump_regs(REGS);
 		fatal("int10 function 0x%02x:%02x only available in X mode\n",
 		    R_AH, R_AL);
+#endif
 	default:
 		if (vflag)
 			dump_regs(REGS);

@@ -84,6 +84,7 @@ static void		com_port_out(int port, unsigned char val);
 static void		com_set_line(struct com_data_struct *cdsp,
 				     unsigned char port, unsigned char param);
  
+#if 0
 static void
 manage_int(struct com_data_struct *cdsp)
 {
@@ -99,6 +100,7 @@ manage_int(struct com_data_struct *cdsp)
  	}
  	unpend (cdsp->irq);
 }
+#endif
  
 static int
 has_enough_data(struct com_data_struct *cdsp)
@@ -120,8 +122,8 @@ input(struct com_data_struct *cdsp, int force_read)
  	int nbytes;
  
  	if (cdsp->ids < N_BYTES && (force_read || !has_enough_data(cdsp))) {
- 		nbytes = read(cdsp->fd, &cdsp->inbuf[cdsp->ids],
-		    N_BYTES - cdsp->ids);
+		nbytes = fread(&cdsp->inbuf[cdsp->ids], N_BYTES - cdsp->ids, 1,
+		    stdin);
  		debug(D_PORT, "read of fd %d on '%s' returned %d (%s)\n",
 		    cdsp->fd, cdsp->path, nbytes,
 		    nbytes == -1 ? strerror(errno) : "");
@@ -136,7 +138,7 @@ output(struct com_data_struct *cdsp)
  	int nbytes;
  
  	if (cdsp->ods > 0) {
- 		nbytes = write(cdsp->fd, &cdsp->outbuf[0], cdsp->ods);
+		nbytes = fwrite(&cdsp->outbuf[0], cdsp->ods, 1, stdout);
  		debug(D_PORT, "write of fd %d on '%s' returned %d (%s)\n",
 		    cdsp->fd, cdsp->path, nbytes,
 		    nbytes == -1 ? strerror(errno) : "");
@@ -151,6 +153,7 @@ output(struct com_data_struct *cdsp)
  	}
 }
  
+#if 0
 static void
 flush_out(void* arg)
 {
@@ -158,6 +161,7 @@ flush_out(void* arg)
  	output(cdsp);
  	manage_int(cdsp);
 }
+#endif
  
 /*
  *  We postponed flush till the end of interrupt processing
@@ -172,11 +176,15 @@ write_char(struct com_data_struct *cdsp, char c)
  		output(cdsp);
  	if (cdsp->ods < N_BYTES) {
  		cdsp->outbuf[cdsp->ods ++] = c;
+#if 0
  		if (!isinhardint(cdsp->irq))
+#endif
  			output(cdsp);
  		r = 1;
  	}
+#if 0
  	manage_int(cdsp);
+#endif
  	return r;
 }
  
@@ -193,7 +201,9 @@ read_char(struct com_data_struct *cdsp)
  		memmove(&cdsp->inbuf[0], &cdsp->inbuf[1], cdsp->ids);
  	}
  
+#if 0
  	manage_int(cdsp);
+#endif
  
  	debug(D_PORT, "read_char: %x\n", c);
  	return c;
@@ -204,7 +214,9 @@ new_ii(struct com_data_struct *cdsp)
 {
  	if ((cdsp->int_enable & IE_TRANS_HLD) && cdsp->ods == 0)
  		cdsp->emptyint = 1;
+#if 0
  	manage_int(cdsp);
+#endif
 }
  
 static unsigned char
@@ -242,6 +254,7 @@ get_int_id(struct com_data_struct *cdsp)
  	return s;
 }
  
+#if 0
 static void
 com_async(int fd __unused, int cond, void *arg, regcontext_t *REGS __unused)
 {
@@ -255,6 +268,7 @@ com_async(int fd __unused, int cond, void *arg, regcontext_t *REGS __unused)
  		output(cdsp);
  	manage_int(cdsp);
 }
+#endif
 
 void
 int14(regcontext_t *REGS)
@@ -274,31 +288,37 @@ int14(regcontext_t *REGS)
     case 0x00:	/* Initialize Serial Port */
 	com_set_line(cdsp, R_DL + 1, R_AL);
 	R_AH = get_status(cdsp);
+#if 0
 	if (cdsp->fossil_mode) {
 	    R_AL = 0x08;
 	    R_AL |= 0x80;
 	}
 	else
+#endif
 	    R_AL = 0;
 	break;
 
     case 0x01:	/* Write Character */
     	if (write_char(cdsp, R_AL)) {
 	    R_AH = get_status(cdsp);
+#if 0
 	    if (cdsp->fossil_mode) {
 		R_AL = 0x08;
 		R_AL |= 0x80;
 	    }
 	    else
+#endif
 		R_AL = 0;
 	} else {
 	    debug(D_PORT, "int14: lost output character 0x%02x\n", R_AL);
 	    R_AH = LS_SW_TIME_OUT;
+#if 0
 	    if (cdsp->fossil_mode) {
 		R_AL = 0x08;
 		R_AL |= 0x80;
 	    }
 	    else
+#endif
 		R_AL = 0;
 	}
 	break;
@@ -316,14 +336,17 @@ int14(regcontext_t *REGS)
 
     case 0x03:	/* Status Request */
 	R_AH = get_status(cdsp);
+#if 0
 	if (cdsp->fossil_mode) {
 	    R_AL = 0x08;
 	    R_AL |= 0x80;
 	}
 	else
+#endif
 	    R_AL = 0;
 	break;
 
+#if 0
     case 0x04:	/* Extended Initialization */
 	if (fossil) {
 	    cdsp->fossil_mode = 1;
@@ -502,6 +525,7 @@ int14(regcontext_t *REGS)
 	    p[bufpos++]=cdsp->param & BITRATE_9600;
 	    break;
 	}
+#endif
 
     default:
 	unknown_int2(0x14, R_AH, REGS);
@@ -514,13 +538,16 @@ int14(regcontext_t *REGS)
 static void
 com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char param)
 {
+#if 0
     struct stat stat_buf;
     int mode = 0;		/* read | write */
+#endif
     int reg_num, ret_val, spd, speed;
     u_int8_t div_hi, div_lo;
     
     debug(D_PORT, "com_set_line: cdsp = %8p, port = 0x%04x,"
 		   "param = 0x%04X.\n", cdsp, port, param);
+#if 0
     if (cdsp->fd > 0) {
 	debug(D_PORT, "Re-initialize serial port com%d\n", port);
 	_RegisterIO(cdsp->fd, 0, 0, 0);
@@ -538,6 +565,7 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
 	      port, cdsp->path);
 	return;
     }
+#endif
     cdsp->param = param;
     
     cdsp->ids = cdsp->ods = cdsp->emptyint = 0;
@@ -646,6 +674,7 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
     ret_val = cfsetospeed(&cdsp->tty, speed);
     debug(D_PORT, "com_set_line: cfsetospeed returned 0x%X.\n", ret_val);
     errno = 0;
+#if 0
     ret_val = tcsetattr(cdsp->fd, 0, &cdsp->tty);
     debug(D_PORT, "com_set_line: tcsetattr returned 0x%X (%s).\n",
 	ret_val, ret_val == -1 ? strerror(errno) : "");
@@ -657,6 +686,7 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
     ret_val = ioctl(cdsp->fd, TIOCFLUSH, &mode);
     debug(D_PORT, "ioctl of 0x%02lx to fd %d on 0x%X returned %d errno %d\n",
 	TIOCFLUSH, cdsp->fd, mode, ret_val, errno);
+#endif
     for (reg_num = 0; reg_num < N_OF_COM_REGS; reg_num++) {
 	define_input_port_handler(cdsp->addr + reg_num, com_port_in);
 	define_output_port_handler(cdsp->addr + reg_num, com_port_out);
@@ -664,8 +694,10 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
     debug(D_PORT, "com%d: attached '%s' at addr 0x%04x irq %d\n",
 	port, cdsp->path, cdsp->addr, cdsp->irq);
 
+#if 0
     set_eoir(cdsp->irq, flush_out, cdsp);
     _RegisterIO(cdsp->fd, com_async, cdsp, 0);
+#endif
 }
 
 static void
@@ -694,10 +726,12 @@ try_set_speed(struct com_data_struct *cdsp)
     ret_val = cfsetospeed(&cdsp->tty, speed);
     debug(D_PORT, "try_set_speed: cfsetospeed returned 0x%X.\n", ret_val);
  
+#if 0
     errno = 0;
     ret_val = tcsetattr(cdsp->fd, 0, &cdsp->tty);
     debug(D_PORT, "try_set_speed: tcsetattr returned 0x%X (%s).\n", ret_val,
 	  ret_val == -1 ? strerror (errno) : "");
+#endif
 }
 
 /* called when config.c initializes a single line */
@@ -851,7 +885,9 @@ com_port_out(int port, unsigned char val)
 	    cdsp->emptyint = 1;
 	}
 	input(cdsp, 1);
+#if 0
 	manage_int(cdsp);
+#endif
 	break;
 	
 	/* 0x03FB - line control register */

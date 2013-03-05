@@ -34,6 +34,7 @@
 __FBSDID("$FreeBSD: projects/doscmd/int16.c,v 1.6 2002/03/07 12:52:27 obrien Exp $");
 
 #include "doscmd.h"
+#if 0
 #include "tty.h"
 
 #define	K_NEXT		*(u_short *)0x41a
@@ -74,47 +75,67 @@ sleep_poll(void)
 	}
     }
 }
+#endif
 
 void
 int16(regcontext_t *REGS)
 {               
+#if 0
     if (!(xmode || raw_kbd || quietmode)) {
 	if (vflag) dump_regs(REGS);
 	fatal ("int16 func 0x%x only supported in X mode\n", R_AH);
     }
+#endif
+
     switch(R_AH) {
     case 0x00:
     case 0x10: /* Get enhanced keystroke */
+#if 0
 	poll_cnt = 16;
 	while (KbdEmpty())
 	    tty_pause();
 	R_AX = KbdRead();
+#endif
+	R_AX = getc(stdin);
 	break;
 
     case 0x01: /* Get keystroke */
     case 0x11: /* Get enhanced keystroke */
+#if 0
 	if (KbdEmpty()) {
 	    R_FLAGS |= PSL_Z;
 	    break;
 	}
 	R_FLAGS &= ~PSL_Z;
 	R_AX = KbdPeek();
+#endif
+	R_AX = getc(stdin);
+	ungetc(R_AX, stdin);
 	break;
 
     case 0x02:
+#if 0
 	R_AL = tty_state();
+#endif
+	R_AL = 0;
 	break;
 
     case 0x12:
+#if 0
 	R_AH = tty_estate();
 	R_AL = tty_state();
+#endif
+	R_AH = 0;
+	R_AL = 0;
 	break;
 
     case 0x03:		/* Set typematic and delay rate */
 	break;
 
     case 0x05:
+#if 0
 	KbdWrite(R_CX);
+#endif
 	break;
 
     case 0x55:

@@ -68,38 +68,40 @@ int01(regcontext_t *REGS)
 	ud_set_vendor(&ud_obj, UD_VENDOR_INTEL);
 
 	if (R_CR0 & CR0_PE) {
-		u_int32_t *sp, eip, eflags;
+		u_int32_t *esp, eip, cs, eflags;
 	
-		sp = (uint32_t *)(lomem_addr + R_ESP);
-		eip = *sp;
-		--sp; /* CS */
-		--sp; /* EFLAGS */
-		eflags = *sp;
-		*sp |= 0x100;
+		esp = (uint32_t *)(lomem_addr + R_ESP);
+		eip = *esp;
+		--esp; /* CS */
+		cs = *esp;
+		--esp; /* EFLAGS */
+		eflags = *esp;
+		*esp |= 0x100;
 		ud_set_mode(&ud_obj, 32);
 		ud_set_pc(&ud_obj, eip);
 		ud_set_input_buffer(&ud_obj, lomem_addr + eip, 16);
 	
-		fprintf(stderr, "[trace] 32bit eip:%x eflags:%x", eip, eflags);
+		fprintf(stderr, "[trace] 32bit eip:%x cs:%x eflags:%x", eip, cs, eflags);
 	}else{
-		u_int16_t *sp, eip, eflags;
+		u_int16_t *sp, ip, cs, flags;
 	
 		sp = (uint16_t *)(lomem_addr + R_ESP);
-		eip = *sp;
+		ip = *sp;
 		--sp; /* CS */
+		cs = *sp;
 		--sp; /* EFLAGS */
-		eflags = *sp;
+		flags = *sp;
 		*sp |= 0x100;
 		ud_set_mode(&ud_obj, 16);
-		ud_set_pc(&ud_obj, eip);
-		ud_set_input_buffer(&ud_obj, lomem_addr + eip, 16);
+		ud_set_pc(&ud_obj, ip);
+		ud_set_input_buffer(&ud_obj, lomem_addr + ip, 16);
 	
-		fprintf(stderr, "[trace] 16bit eip:%x eflags:%x", eip, eflags);
+		fprintf(stderr, "[trace] 16bit ip:%x cs:%x flags:%x", ip, cs, flags);
 	}
 	ud_disassemble(&ud_obj);
 	fprintf(stderr, " insn:%s", ud_insn_asm(&ud_obj));
-	fprintf(stderr, " eax:%x ebx:%x ecx:%x edx:%x\n",
-			R_EAX, R_EBX, R_ECX, R_EDX);
+	fprintf(stderr, " eax:%x ebx:%x ecx:%x edx:%x cs:%x\n",
+			R_EAX, R_EBX, R_ECX, R_EDX, R_CS);
 }
 
 void
@@ -135,6 +137,10 @@ cpu_init(void)
     vec = insert_hardint_trampoline();
     ivec[0x0d] = vec;
     register_callback(vec, int0d, "int 0d");
+
+    vec = insert_softint_trampoline();
+    ivec[0x10] = vec;
+    register_callback(vec, int10, "int 10");
 
     vec = insert_null_trampoline();
     ivec[0x34] = vec;	/* floating point emulator */
@@ -443,9 +449,11 @@ reg32(u_int8_t c, regcontext_t *REGS)
 static u_int8_t
 read_byte(u_int32_t addr)
 {
+#if 0
     if (addr >= 0xa0000 && addr < 0xb0000)
 	return vga_read(addr);
     else
+#endif
 	return *(u_int8_t *)(uintptr_t)(lomem_addr + addr);
 }
 
@@ -454,9 +462,11 @@ read_byte(u_int32_t addr)
 static void
 write_byte(u_int32_t addr, u_int8_t val)
 {
+#if 0
     if (addr >= 0xa0000 && addr < 0xb0000)
 	vga_write(addr, val);
     else
+#endif
 	*(u_int8_t *)(uintptr_t)(lomem_addr + addr) = val;
 
     return;
@@ -467,10 +477,12 @@ write_byte(u_int32_t addr, u_int8_t val)
 static void
 write_word(u_int32_t addr, u_int16_t val)
 {
+#if 0
     if (addr >= 0xa0000 && addr < 0xb0000) {
 	vga_write(addr, (u_int8_t)(val & 0xff));
 	vga_write(addr + 1, (u_int8_t)((val & 0xff00) >> 8));
     } else
+#endif
 	*(u_int16_t *)(uintptr_t)(lomem_addr + addr) = val;
 
     return;
