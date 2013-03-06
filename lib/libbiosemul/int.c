@@ -27,6 +27,7 @@ __FBSDID("$FreeBSD: projects/doscmd/int.c,v 1.8 2002/03/30 13:51:40 dwmalone Exp
 
 #include "doscmd.h"
 
+#if 0
 struct IRQ {
     int pending;
     int busy;
@@ -34,8 +35,10 @@ struct IRQ {
     void (*eoir)(void *arg);
     void *arg;
 };
+#endif
 
 static unsigned char IM, IM2;
+#if 0
 static int Irql;
 static struct IRQ Irqs[8];
 
@@ -175,6 +178,7 @@ unpend(int irql)
     Irqs[irql].pending = 0;
     set_vip();
 }
+#endif
 
 static unsigned char
 irqc_in(int port __unused)
@@ -185,8 +189,10 @@ irqc_in(int port __unused)
 static void
 irqc_out(int port __unused, unsigned char val)
 {
+#if 0
     if (val == 0x20)
 	send_eoi();
+#endif
 }
 
 static unsigned char
@@ -206,9 +212,10 @@ imr_out(int port, unsigned char val)
         IM = val;
     else if (port == 0xa1)
         IM2 = val;
-    resume_interrupt();
+//    resume_interrupt();
 }
  
+#if 0
 /*
 ** Cause a software interrupt to happen immediately after we
 ** return to vm86 mode
@@ -246,20 +253,25 @@ softint(int intnum)
     R_EFLAGS &= ~PSL_VIF;		/* XXX disable interrupts? */
     PUTVEC(R_CS, R_IP, vec);
 }
+#endif
 
 void
 init_ints(void)
 {
+#if 0
     int i;
-    
+
     for (i = 0; i < 8; i++) {
 	Irqs[i].busy = 0;
 	Irqs[i].pending = 0;
 	Irqs[i].within = 0;
     }
+#endif
     
     IM = IM2 = 0x00;
+#if 0
     Irql = 8;
+#endif
     
     define_input_port_handler(0x20, irqc_in);
     define_output_port_handler(0x20, irqc_out);

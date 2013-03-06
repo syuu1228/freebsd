@@ -132,7 +132,7 @@ void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace)
     lomem_addr = lomem;
     ivec = (u_int32_t *)lomem_addr;
 
-//    init_ints();
+    init_ints();
 
     debugf = stderr;
 //    debugf = fopen("biosemul.log", "w");

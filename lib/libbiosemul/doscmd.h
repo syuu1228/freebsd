@@ -201,9 +201,9 @@ extern void	emuint(regcontext_t *REGS);
 extern int	i386dis(unsigned short, unsigned short,
     unsigned char *, char *, int);
 
-#if 0
 /* int.c */
 void	init_ints(void);
+#if 0
 int	isinhardint(int);
 void	softint(int);
 void	hardint(int);

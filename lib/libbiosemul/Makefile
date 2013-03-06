@@ -7,7 +7,7 @@ WARNS?=	2
 SRCS=	biosemul.c \
 	bios.c callback.c cpu.c \
 	debug.c i386-pinsn.c \
-	int10.c int13.c int14.c int16.c \
+	int.c int10.c int13.c int14.c int16.c \
 	port.c trap.c \
 	${FONTHDRS}
 INCS=	biosemul.h
