@@ -94,6 +94,15 @@ struct diskinfo {
     int		changed:1;		/* Set if we change format */
 };
 
+struct dap {
+	uint8_t size;
+	uint8_t unused;
+	uint16_t nsectors;
+	uint16_t data_off;
+	uint16_t data_seg;
+	uint64_t lba;
+} __attribute__((packed));
+
 #define	hd_status	(*(u_char *)(lomem_addr + 0x474))
 #define	fd_status	(*(u_char *)(lomem_addr + 0x441))
 
@@ -588,6 +597,7 @@ int13(regcontext_t *REGS)
     int sector;
     int side;
     int drive;
+    struct dap *dap;
     
 #if 0
     reset_poll();
@@ -878,7 +888,105 @@ int13(regcontext_t *REGS)
 	break;
 
     case 0x41:
-        
+	R_AH = 0;
+	R_BX = 0xaa55;
+	R_CX = 0x0007;
+	R_FLAGS = 0;
+	break;
+
+    case 0x42:
+	R_AH = 0;
+    	dap = (struct dap *)(lomem_addr + MAKEPTR(R_DS, R_SI));
+	addr = (char *)(lomem_addr + MAKEPTR(dap->data_seg, dap->data_off));
+	sectors = dap->nsectors;
+	debug(D_DISK, "%s eread addr:%x sectors:%d drive:%x\n",
+	    __func__, (dap->data_seg << 4) + dap->data_off, sectors, drive);
+	if ((di = getdisk(drive)) == 0) {
+	    debug(D_DISK, "Bad drive: %02x (%d : %d : %d)\n",
+	        drive, cyl, side, sector);
+	    seterror(INT13_ERR_BAD_COMMAND);
+	    break;
+	}
+	start = dap->lba * di->sectors;
+	debug(D_DISK, "%s eread start:%ld lba:%ld di->sectors:%d\n",
+	    __func__, start, dap->lba, di->sectors);
+	    
+	
+	if (start >= disize(di)) {
+	    debug(D_DISK, "Read past end of disk\n");
+	    seterror(INT13_ERR_SEEK);
+	    break;
+	}
+	if (sectors + start >= disize(di)) {
+	    sectors = disize(di) - start;
+	}
+	if (di->sector0) {
+	    if (start < di->offset) {
+		dap->nsectors = sectors;
+		if (start == 0) {
+		    memcpy(addr, di->sector0, di->secsize);
+		    addr += di->secsize;
+		    --sectors;
+		}
+		memset(addr, 0, sectors * di->secsize);
+		break;
+	    } else {
+		start -= di->offset;
+	    }
+	}
+	debug(D_DISK, "%02x: ERead %2d sectors from %jd to %04x:%04x\n",
+		drive, sectors, start, dap->data_seg, dap->data_off);
+
+	if ((did = diread(di, REGS, start, addr, sectors)) >= 0)
+	    dap->nsectors = did;
+
+	debug(D_DISK, "%s did:%d\n", __func__, did);
+    	break;
+
+    case 0x43:
+    	    dap = (struct dap *)(lomem_addr + MAKEPTR(R_DS, R_SI));
+	    R_AH = 0;
+	    addr = (char *)(lomem_addr + MAKEPTR(dap->data_seg, dap->data_off));
+	    sectors = dap->nsectors;
+	    dap->nsectors = 0;
+
+	    if ((di = getdisk(drive)) == 0) {
+		debug(D_DISK, "Bad drive: %d (%d : %d : %d)\n",
+		      drive, cyl, side, sector);
+		seterror(INT13_ERR_BAD_COMMAND);
+		break;
+	    }
+	    if (di->read_only) {
+		debug(D_DISK, "%02x: Attempt to write readonly disk\n", drive);
+		seterror(INT13_ERR_WRITE_PROTECT);
+		break;
+	    }
+	    start = dap->lba * di->sectors;
+	    
+	    if (start >= disize(di)) {
+		debug(D_DISK, "Write past end of disk\n");
+		seterror(INT13_ERR_SEEK);
+		break;
+	    }
+
+	    if (sectors + start >= disize(di))
+		sectors = disize(di) - start;
+
+	    if (di->sector0) {
+		if (start < di->offset) {
+		    dap->nsectors = sectors;
+		    break;
+		} else {
+		    start -= di->offset;
+		}
+	    }
+
+	    debug(D_DISK, "%02x: EWrite %2d sectors from %jd to %04x:%04x\n",
+		  drive, sectors, start, R_ES, R_BX);
+
+	    if ((did = diwrite(di, REGS, start, addr, sectors)) >= 0)
+		dap->nsectors = did;
+
 
     default:
 	unknown_int2(0x13, R_AH, REGS);

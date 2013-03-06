@@ -116,7 +116,7 @@ static struct vm86_init_args kargs;
 static int set_modified_regs(struct vmctx *ctx, int vcpu, regcontext_t *orig, regcontext_t *modified);
 static int get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs);
 
-#define HDISK_CYL 1305
+#define HDISK_CYL 95 
 #define HDISK_HEAD 255
 #define HDISK_TRACK 63
 #define HDISK_FILE "/home/syuu/freebsd.img"
