@@ -145,6 +145,8 @@ void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace)
     init_io_port_handlers();
     bios_init();
     init_hdisk(2, HDISK_CYL, HDISK_HEAD, HDISK_TRACK, HDISK_FILE, NULL);
+    error = vm_set_register(ctx, 0, VM_REG_GUEST_RDX, 0x80);
+    assert(error == 0);
     error = try_boot(booting = 2);	/* try C: */
     assert(error >= 0);
     cpu_init();
