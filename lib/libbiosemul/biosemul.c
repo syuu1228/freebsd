@@ -958,7 +958,6 @@ done:
 
 extern void int13(regcontext_t *REGS);
 
-extern u_int32_t vec01;
 int
 biosemul_call(struct vmctx *ctx, int vcpu)
 {
@@ -1018,7 +1017,7 @@ biosemul_call(struct vmctx *ctx, int vcpu)
 	if (func)
 		func(&modified);
 
-	if (trace_mode && MAKEVEC(R_CS, R_IP) != vec01)
+	if (trace_mode && MAKEVEC(R_CS, R_IP) != ivec[0x01])
 		R_EFLAGS |= 0x100;
 	set_modified_regs(ctx, vcpu, &orig, &modified);
 

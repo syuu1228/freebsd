@@ -116,7 +116,6 @@ int0d(regcontext_t *REGS __unused)
     debug(D_ALWAYS, "IRQ5 with no handler!\n");
 }
 
-u_int32_t vec01;
 void
 cpu_init(void)
 {
@@ -126,9 +125,9 @@ cpu_init(void)
     ivec[0x00] = vec;
     register_callback(vec, int00, "int 00");
 
-    vec01 = insert_hardint_trampoline();
-    ivec[0x01] = vec01;
-    register_callback(vec01, int01, "int 01");
+    vec = insert_hardint_trampoline();
+    ivec[0x01] = vec;
+    register_callback(vec, int01, "int 01");
 
     vec = insert_softint_trampoline();
     ivec[0x03] = vec;
