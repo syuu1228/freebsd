@@ -891,7 +891,6 @@ int13(regcontext_t *REGS)
 	R_AH = 0;
 	R_BX = 0xaa55;
 	R_CX = 0x0007;
-	R_FLAGS = 0;
 	break;
 
     case 0x42:
