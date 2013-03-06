@@ -85,6 +85,8 @@ typedef struct
     reg86_t	esp;
     reg86_t	ss;
     reg86_t	cr0;
+    reg86_t	idtr;
+    reg86_t	gdtr;
 } registers_t;
 
 typedef union 
@@ -141,6 +143,8 @@ typedef union
 #define R_EFS		(REGS->r.fs.r_dw.r_ex)
 #define R_FS		(REGS->r.fs.r_w.r_x)
 #define R_CR0		(REGS->r.cr0.r_dw.r_ex)
+#define R_IDTR		(REGS->r.idtr.r_dw.r_ex)
+#define R_GDTR		(REGS->r.gdtr.r_dw.r_ex)
 
 #endif
 

@@ -811,6 +811,7 @@ iomap_port(int port, int count)
 static int
 get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs)
 {
+	uint32_t desc_limit, desc_access;
 	int error = 0;
 
 	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_GS, &regs->r.gs.r_rx)) != 0)
@@ -862,6 +863,12 @@ get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs)
 		goto done;
 
 	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_CR0, &regs->r.cr0.r_rx)) != 0)
+		goto done;
+
+	if ((error = vm_get_desc(ctx, vcpu, VM_REG_GUEST_IDTR, &regs->r.idtr.r_rx, &desc_limit, &desc_access)) != 0)
+		goto done;
+
+	if ((error = vm_get_desc(ctx, vcpu, VM_REG_GUEST_GDTR, &regs->r.gdtr.r_rx, &desc_limit, &desc_access)) != 0)
 		goto done;
 done:
 	return (error);
@@ -1009,11 +1016,10 @@ biosemul_call(struct vmctx *ctx, int vcpu)
 		modified.r.ebx.r_b.r_l,
 		modified.r.ebx.r_b.r_h);
 #endif
+//	fprintf(stderr, "%s R_CS:%x R_IP:%x MAKEVEC(R_CS, R_IP):%x\n", 
+//		__func__, R_CS, R_IP, MAKEVEC(R_CS, R_IP));
+
 	callback_t func = find_callback(MAKEVEC(R_CS, R_IP));
-#if 0
-	fprintf(stderr, "%s R_CS:%x R_IP:%x MAKEVEC(R_CS, R_IP):%x func:%p\n", 
-		__func__, R_CS, R_IP, MAKEVEC(R_CS, R_IP), func);
-#endif
 	if (func)
 		func(&modified);
 
