@@ -49,6 +49,9 @@ __FBSDID("$FreeBSD$");
 #include <vmmapi.h>
 #include <biosemul.h>
 
+#include <machine/specialreg.h>
+#include <udis86/udis86.h>
+
 #include "bhyverun.h"
 #include "acpi.h"
 #include "inout.h"
@@ -333,18 +336,6 @@ vmexit_inout(struct vmctx *ctx, struct vm_exit *vme, int *pvcpu)
 	if (error == 0 && in)
 		error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RAX, eax);
 
-#if 0
- 	if (trace_mode) {
- 		uint64_t rflags;
- 
- 		error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, &rflags);
- 		assert(error == 0);
- 		rflags |= 0x100; /* Trap Flag */
- 		error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, rflags);
- 		assert(error == 0);
- 	}
-#endif
-
 	if (error == 0)
 		return (VMEXIT_CONTINUE);
 	else {
@@ -429,6 +420,54 @@ vmexit_bogus(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	}
 }
 
+static void
+vmexit_disasm(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu, char *str)
+{
+	ud_t ud_obj;
+	uint64_t rip_off, cr0, cs, rip, rflags, rsp, ds, ss, rax, rbx, rcx, rdx;
+	int error;
+		
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_CR0, &cr0);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_CS, &cs);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RIP, &rip);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RFLAGS, &rflags);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RSP, &rsp);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_DS, &ds);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_SS, &ss);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RAX, &rax);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RBX, &rbx);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RCX, &rcx);
+	assert(error == 0);
+	error = vm_get_register(ctx, *pvcpu, VM_REG_GUEST_RDX, &rdx);
+	assert(error == 0);
+
+	ud_init(&ud_obj);
+	ud_set_syntax(&ud_obj, UD_SYN_ATT);
+	ud_set_vendor(&ud_obj, UD_VENDOR_INTEL);
+	ud_set_mode(&ud_obj, cr0 & CR0_PE ? 32:16);
+	ud_set_pc(&ud_obj, rip);
+	rip_off = (cr0 & CR0_PE && cs & 0x3) ? 0xa000 : 0;
+	ud_set_input_buffer(&ud_obj, lomem_addr + rip + rip_off, 16);
+	ud_disassemble(&ud_obj);
+	fprintf(stderr, "[%s] %dbit%s ip:%lx cs:%lx flags:%lx sp:%lx", 
+	    str,
+	    cr0 & CR0_PE ? 32:16,
+	    (cr0 & CR0_PE) ? (cs & 0x3) ? "-user" : "-kern" : "",
+	    rip, cs, rflags, rsp);
+	fprintf(stderr, " insn:%s", ud_insn_asm(&ud_obj));
+	fprintf(stderr, " ds:%lx ss:%lx cr0:%lx eax:%lx ebx:%lx ecx:%lx edx:%lx\n",
+		ds, ss, cr0, rax, rbx, rcx, rdx);
+}
+
 static int
 vmexit_hlt(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 {
@@ -479,6 +518,7 @@ vmexit_paging(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 			  &vmexit->u.paging.vie);
 
 	if (err) {
+		vmexit_disasm(ctx, vmexit, pvcpu, "paging");
 		if (err == EINVAL) {
 			fprintf(stderr,
 			    "Failed to emulate instruction at 0x%lx\n", 
@@ -509,7 +549,7 @@ vmexit_hypercall(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 		return (VMEXIT_ABORT);
 	}
 
-	if (biosemul_call(ctx, *pvcpu) != 0) {
+	if (biosemul_call(ctx, vmexit, *pvcpu) != 0) {
 		fprintf(stderr, "Failed to emulate INT %x at 0x%lx\n", 
 			intno, vmexit->rip);
 		return (VMEXIT_ABORT);
