@@ -119,6 +119,7 @@ void	int0d(regcontext_t *);
 extern int	vflag;
 extern int	tmode;
 extern FILE	*debugf;
+extern FILE	*tracef;
 extern int	debug_flags;
 
 /* Lower 8 bits are int number */
@@ -259,9 +260,11 @@ void	int33(regcontext_t *);
 void	mouse_init(void);
 
 /* port.c */
-void	define_input_port_handler(int, unsigned char (*)(int));
-void	define_output_port_handler(int, void (*)(int, unsigned char));
+void	define_input_port_handler(int, int, void *);
+void	define_output_port_handler(int, int, void *);
 void	inb(regcontext_t *, int);
+void	inw(regcontext_t *, int);
+void	inl(regcontext_t *, int);
 unsigned char	inb_port(int);
 unsigned char	inb_traceport(int);
 void	init_io_port_handlers(void);
@@ -269,6 +272,8 @@ void	insb(regcontext_t *, int);
 void	insx(regcontext_t *, int);
 void	inx(regcontext_t *, int);
 void	outb(regcontext_t *, int);
+void	outw(regcontext_t *, int);
+void	outl(regcontext_t *, int);
 void	outb_port(int, unsigned char);
 void	outb_traceport(int, unsigned char);
 void	outsb(regcontext_t *, int);

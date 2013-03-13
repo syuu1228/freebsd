@@ -7,7 +7,7 @@
 #include <vmmapi.h>
 
 void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace_mode);
-int biosemul_call(struct vmctx *ctx, int vcpu);
+int biosemul_call(struct vmctx *ctx, struct vm_exit *vmexit, int vcpu);
 bool biosemul_inout_registered(int in, int port);
 int biosemul_inout(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 	uint32_t *eax, int strict);

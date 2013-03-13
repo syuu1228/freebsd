@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD: projects/doscmd/port.c,v 1.9 2002/07/19 13:38:43 markm Exp $
 #define	MINPORT		0x000
 #define	MAXPORT_MASK	(MAXPORT - 1)
 
+#if 0
 static __inline int
 in(u_int port)
 {
@@ -61,6 +62,7 @@ out(u_int port, int data)
         __asm __volatile ("outb %%al,%%dx" : : "a" (data), "d" (port));
 #endif
 }
+#endif
 
 FILE *iolog = 0;
 u_int32_t ioports[MAXPORT/32];
@@ -167,7 +169,6 @@ inb_traceport(int port)
  */
     return(byte);
 }
-#endif
 
 /*
  * Real input/output to (hopefully) iomapped port
@@ -183,6 +184,7 @@ inb_port(int port)
 {
     return in(port);
 }
+#endif
 
 /* 
  * Fake input/output ports
@@ -206,6 +208,42 @@ inb_nullport(int port __unused)
     return(0xff);
 }
 
+static void
+outw_nullport(int port __unused, uint16_t val __unused)
+{
+/*
+    debug(D_PORT, "outb_nullport called for port 0x%03X = 0x%02X.\n",
+		   port, byte);
+ */
+}
+
+static uint16_t
+inw_nullport(int port __unused)
+{
+/*
+    debug(D_PORT, "inb_nullport called for port 0x%03X.\n", port);
+ */
+    return(0xffff);
+}
+
+static void
+outl_nullport(int port __unused, uint32_t val __unused)
+{
+/*
+    debug(D_PORT, "outb_nullport called for port 0x%03X = 0x%02X.\n",
+		   port, byte);
+ */
+}
+
+static uint32_t
+inl_nullport(int port __unused)
+{
+/*
+    debug(D_PORT, "inb_nullport called for port 0x%03X.\n", port);
+ */
+    return(0xffffffff);
+}
+
 /*
  * configuration table for ports' emulators
  */
@@ -213,6 +251,10 @@ inb_nullport(int port __unused)
 struct portsw {
 	unsigned char	(*p_inb)(int port);
 	void		(*p_outb)(int port, unsigned char byte);
+	uint16_t	(*p_inw)(int port);
+	void		(*p_outw)(int port, uint16_t val);
+	uint32_t	(*p_inl)(int port);
+	void		(*p_outl)(int port, uint32_t val);
 } portsw[MAXPORT];
 
 void
@@ -225,24 +267,45 @@ init_io_port_handlers(void)
 	    portsw[i].p_inb = inb_nullport;
 	if (portsw[i].p_outb == 0)
 	    portsw[i].p_outb = outb_nullport;
+	if (portsw[i].p_inw == 0)
+	    portsw[i].p_inw = inw_nullport;
+	if (portsw[i].p_outw == 0)
+	    portsw[i].p_outw = outw_nullport;
+	if (portsw[i].p_inl == 0)
+	    portsw[i].p_inl = inl_nullport;
+	if (portsw[i].p_outl == 0)
+	    portsw[i].p_outl = outl_nullport;
     }
-
 }
 
 void
-define_input_port_handler(int port, unsigned char (*p_inb)(int port))
+define_input_port_handler(int port, int bytes, void *p)
 {
 	if ((port >= MINPORT) && (port < MAXPORT)) {
-		portsw[port].p_inb = p_inb;
+		if (bytes == 1)
+			portsw[port].p_inb = p;
+		else if (bytes == 2)
+			portsw[port].p_inw = p;
+		else if (bytes == 4)
+			portsw[port].p_inl = p;
+		else
+			fprintf (stderr, "invalid port size(%d) on port 0x%04x", bytes, port);
 	} else
 		fprintf (stderr, "attempt to handle invalid port 0x%04x", port);
 }
 
 void
-define_output_port_handler(int port, void (*p_outb)(int port, unsigned char byte))
+define_output_port_handler(int port, int bytes, void *p)
 {
 	if ((port >= MINPORT) && (port < MAXPORT)) {
-		portsw[port].p_outb = p_outb;
+		if (bytes == 1)
+			portsw[port].p_outb = p;
+		else if (bytes == 2)
+			portsw[port].p_outw = p;
+		else if (bytes == 4)
+			portsw[port].p_outl = p;
+		else
+			fprintf (stderr, "invalid port size(%d) on port 0x%04x", bytes,  port);
 	} else
 		fprintf (stderr, "attempt to handle invalid port 0x%04x", port);
 }
@@ -259,6 +322,32 @@ inb(regcontext_t *REGS, int port)
 		in_handler = inb_nullport;
 	R_AL = (*in_handler)(port);
 	debug(D_PORT, "IN  on port %02x -> %02x\n", port, R_AL);
+}
+
+void
+inw(regcontext_t *REGS, int port)
+{
+	uint16_t (*in_handler)(int);
+
+	if ((port >= MINPORT) && (port < MAXPORT))
+		in_handler = portsw[port].p_inw;
+	else
+		in_handler = inw_nullport;
+	R_AX = (*in_handler)(port);
+	debug(D_PORT, "IN  on port %02x -> %04x\n", port, R_AX);
+}
+
+void
+inl(regcontext_t *REGS, int port)
+{
+	uint32_t (*in_handler)(int);
+
+	if ((port >= MINPORT) && (port < MAXPORT))
+		in_handler = portsw[port].p_inl;
+	else
+		in_handler = inl_nullport;
+	R_EAX = (*in_handler)(port);
+	debug(D_PORT, "IN  on port %02x -> %08x\n", port, R_EAX);
 }
 
 void
@@ -345,6 +434,32 @@ outb(regcontext_t *REGS, int port)
 }
 
 void
+outw(regcontext_t *REGS, int port)
+{
+	void (*out_handler)(int, uint16_t);
+
+	if ((port >= MINPORT) && (port < MAXPORT))
+		out_handler = portsw[port].p_outw;
+	else
+		out_handler = outw_nullport;
+	(*out_handler)(port, R_AX);
+	debug(D_PORT, "OUT on port %02x <- %04x\n", port, R_AX);
+}
+
+void
+outl(regcontext_t *REGS, int port)
+{
+	void (*out_handler)(int, uint32_t);
+
+	if ((port >= MINPORT) && (port < MAXPORT))
+		out_handler = portsw[port].p_outl;
+	else
+		out_handler = outl_nullport;
+	(*out_handler)(port, R_EAX);
+	debug(D_PORT, "OUT on port %02x <- %08x\n", port, R_EAX);
+}
+
+void
 outx(regcontext_t *REGS, int port)
 {
 	void (*out_handler)(int, unsigned char);
@@ -417,8 +532,12 @@ bool io_port_defined(int in, int port)
 		return false;
 
 	if (in)
-		return (((void *)portsw[port].p_inb) != inb_nullport);
+		return (((void *)portsw[port].p_inb) != inb_nullport |
+		    ((void *)portsw[port].p_inw) != inw_nullport |
+		    ((void *)portsw[port].p_inl) != inl_nullport);
 	else
-		return (((void *)portsw[port].p_outb) != inb_nullport);
+		return (((void *)portsw[port].p_outb) != outb_nullport |	
+		    ((void *)portsw[port].p_outw) != outw_nullport |
+		    ((void *)portsw[port].p_outl) != outl_nullport);
 }
 

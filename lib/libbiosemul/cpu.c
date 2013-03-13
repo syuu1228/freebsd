@@ -84,84 +84,58 @@ int01(regcontext_t *REGS)
 	ud_set_vendor(&ud_obj, UD_VENDOR_INTEL);
 
 	if (R_CR0 & CR0_PE) {
-		u_int32_t sp, ip, cs, flags;
+		u_int32_t esp, eip, cs, eflags, old_esp, ss, eip_off;
 	
-		sp = R_ESP;
-		ip = *(uint32_t *)(lomem_addr + MAKEPTR(R_SS, sp));
-		sp += 4; /* CS */
-		cs = *(uint32_t *)(lomem_addr + MAKEPTR(R_SS, sp));
-		sp += 4; /* EFLAGS */
-		flags = *(uint32_t *)(lomem_addr + MAKEPTR(R_SS, sp));
-		*(uint32_t *)(lomem_addr + MAKEPTR(R_SS, sp)) |= 0x100;
-		sp += 4;
+		esp = R_ESP;
+		eip = *(uint32_t *)(lomem_addr + esp);
+		esp += 4;
+		cs = *(uint32_t *)(lomem_addr + esp);
+		esp += 4;
+		eflags = *(uint32_t *)(lomem_addr + esp);
+		*(uint32_t *)(lomem_addr + esp) |= 0x100;
+		esp += 4;
+		if (cs & 0x3) {
+			old_esp = *(uint32_t *)(lomem_addr + esp);
+			esp += 4;
+			ss =  *(uint32_t *)(lomem_addr + esp);
+			eip_off = 0xa000;
+		} else {
+			old_esp = esp;
+			ss = R_SS;
+			eip_off = 0x0;
+		}
+
 		ud_set_mode(&ud_obj, 32);
-		ud_set_pc(&ud_obj, ip);
-		ud_set_input_buffer(&ud_obj, lomem_addr + ip, 16);
-		ud_disassemble(&ud_obj);
+		ud_set_pc(&ud_obj, eip);
+		ud_set_input_buffer(&ud_obj, lomem_addr + eip + eip_off, 16);
 	
-		fprintf(stderr, "[trace] 32bit ip:%x cs:%x flags:%x sp:%x", ip, cs, flags, sp);
+		fprintf(tracef, "32bit-%s eip:%x cs:%x eflags:%x ss:%x esp:%x", 
+			cs & 0x3 ? "user" : "kern", eip, cs, eflags, ss, old_esp);
+		fflush(tracef);
 	}else{
 		u_int16_t sp, ip, cs, flags;
 	
 		sp = R_SP;
 		ip = *(uint16_t *)(lomem_addr + MAKEPTR(R_SS, sp));
-		sp += 2; /* CS */
+		sp += 2;
 		cs = *(uint16_t *)(lomem_addr + MAKEPTR(R_SS, sp));
-		sp += 2; /* EFLAGS */
+		sp += 2;
 		flags = *(uint16_t *)(lomem_addr + MAKEPTR(R_SS, sp));
 		*(uint16_t *)(lomem_addr + MAKEPTR(R_SS, sp)) |= 0x100;
 		sp += 2;
 		ud_set_mode(&ud_obj, 16);
 		ud_set_pc(&ud_obj, ip);
 		ud_set_input_buffer(&ud_obj, lomem_addr + ip, 16);
-		ud_disassemble(&ud_obj);
 	
-		fprintf(stderr, "[trace] 16bit ip:%x cs:%x flags:%x sp:%x", ip, cs, flags, sp);
+		fprintf(tracef, "16bit ip:%x cs:%x flags:%x ss:%x sp:%x",
+			ip, cs, flags, R_SS, sp);
 	}
-	fprintf(stderr, " insn:%s", ud_insn_asm(&ud_obj));
-	fprintf(stderr, " ds:%x ss:%x cr0:%x eax:%x ebx:%x ecx:%x edx:%x\n",
-			R_DS, R_SS, R_CR0, R_EAX, R_EBX, R_ECX, R_EDX);
-
-#if 0
-	if (ud_obj.mnemonic == UD_Ilidt) {
-		struct region_descriptor *idtr;
-		struct gate_descriptor *idt;
-		uint16_t ivec_seg, ivec_off;
-		int i;
-
-		fprintf(stderr, " gdtr:%x idtr:%x\n", R_IDTR, R_GDTR);
-		PUTVEC(ivec_seg, ivec_off, ivec[0x01]);
-		fprintf(stderr, " ivec_seg:%x ivec_off:%x ptr:%x\n", ivec_seg,
-		    ivec_off, VECPTR(ivec[0x01]));
-		idtr = (struct region_descriptor *)(lomem_addr + ud_obj.operand[0].lval.uword);
-		fprintf(stderr, " idtr:[ptr:%x limit:%x base:%x]\n", ud_obj.operand[0].lval.uword, idtr->rd_limit, idtr->rd_base);
-		idt = (struct gate_descriptor *)(lomem_addr + idtr->rd_base);
-//		idt[0x01].gd_looffset = VECPTR(ivec[0x01]) & 0xffff;
-//		idt[0x01].gd_hioffset = VECPTR(ivec[0x01]) >> 16;
-		for (i = 0; i < (idtr->rd_limit / sizeof(struct gate_descriptor)); i++) {
-			fprintf(stderr, " idt[%d] offset:%x selector:%x type:%x dpl:%x p:%x\n",
-				i, idt->gd_looffset + (idt->gd_hioffset << 16), idt->gd_selector, idt->gd_type, idt->gd_dpl, idt->gd_p);
-			idt++;
-		}
-#if 0
-		{
-			int i;
-			uint32_t vecip = idt[0x01].gd_looffset + (idt[0x01].gd_hioffset << 16);
-			ud_t ud_obj2;
-			ud_init(&ud_obj2);
-			ud_set_mode(&ud_obj2, 16);
-			ud_set_syntax(&ud_obj2, UD_SYN_ATT);
-			ud_set_vendor(&ud_obj2, UD_VENDOR_INTEL);
-			ud_set_pc(&ud_obj2, vecip);
-			ud_set_input_buffer(&ud_obj2, lomem_addr + vecip, 32);
-			for (i = 0; i < 128; i++) {
-				ud_disassemble(&ud_obj2);
-				fprintf(stderr, "insn[%d]:%s\n", i, ud_insn_asm(&ud_obj2));
-			}
-		}
-#endif
-	}
-#endif
+	fprintf(tracef, " ds:%x cr0:%x eax:%x ebx:%x ecx:%x edx:%x",
+			R_DS, R_CR0, R_EAX, R_EBX, R_ECX, R_EDX);
+	fflush(tracef);
+	ud_disassemble(&ud_obj);
+	fprintf(tracef, " insn:%s\n", ud_insn_asm(&ud_obj));
+	fflush(tracef);
 }
 
 void

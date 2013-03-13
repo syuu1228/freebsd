@@ -203,7 +203,10 @@ int10(regcontext_t *REGS)
 #endif
 		tty_write(R_AL, TTYF_REDIRECT);
 #endif
+		debug(D_VIDEO, "putchar %c\n", 0xff & R_AL);
+
 		putc(0xff & R_AL, stdout);
+		fflush(stdout);
 		break;
 	case 0x0f:		/* get current video mode */
 #if 0

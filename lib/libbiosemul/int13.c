@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD: projects/doscmd/int13.c,v 1.11 2002/07/19 13:38:43 markm Exp
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "doscmd.h"
 
@@ -105,6 +106,13 @@ struct dap {
 
 #define	hd_status	(*(u_char *)(lomem_addr + 0x474))
 #define	fd_status	(*(u_char *)(lomem_addr + 0x441))
+
+#define BIOSEMUL_DISK_LBA	0x300
+#define BIOSEMUL_DISK_COUNT	0x301
+#define BIOSEMUL_DISK_ADDR	0x302
+#define BIOSEMUL_DISK_COMMAND 	0x303
+#define BIOSEMUL_DISK_COMMAND_READ 0
+#define BIOSEMUL_DISK_COMMAND_WRITE 1
 
 static __inline int
 disize(struct diskinfo *di)
@@ -993,6 +1001,37 @@ int13(regcontext_t *REGS)
     }
 }
 
+static uint32_t port_lba, port_count, port_addr;
+void
+disk_port_out(int port, uint32_t val)
+{
+	debug(D_DISK, "%s port:%x val:%x\n", __func__, port, val);
+	switch (port) {
+		case BIOSEMUL_DISK_LBA:
+			port_lba = val;
+			break;
+		case BIOSEMUL_DISK_COUNT:
+			port_count = val;
+			break;
+		case BIOSEMUL_DISK_ADDR:
+			port_addr = val;
+			break;
+		case BIOSEMUL_DISK_COMMAND: {
+			struct diskinfo *di;
+			off_t res;
+			char *addr;
+			di = getdisk(0x80);
+			assert(di);
+			res = lseek(di->fd, port_lba * di->secsize, 0);
+			assert(res >= 0);
+			addr = lomem_addr + port_addr;
+			res = read(di->fd, addr, port_count * di->secsize);
+			assert(res >= 0);
+			break;
+		}
+	}
+}
+
 void
 disk_bios_init(void)
 {
@@ -1004,4 +1043,9 @@ disk_bios_init(void)
     
     vec = insert_null_trampoline();
     ivec[0x76] = vec;
+
+    define_output_port_handler(BIOSEMUL_DISK_LBA, 4, disk_port_out);
+    define_output_port_handler(BIOSEMUL_DISK_COUNT, 4, disk_port_out);
+    define_output_port_handler(BIOSEMUL_DISK_ADDR, 4, disk_port_out);
+    define_output_port_handler(BIOSEMUL_DISK_COMMAND, 4, disk_port_out);
 }

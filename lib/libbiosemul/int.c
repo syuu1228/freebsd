@@ -273,13 +273,13 @@ init_ints(void)
     Irql = 8;
 #endif
     
-    define_input_port_handler(0x20, irqc_in);
-    define_output_port_handler(0x20, irqc_out);
-    define_input_port_handler(0x21, imr_in);
-    define_output_port_handler(0x21, imr_out);
+    define_input_port_handler(0x20, 1, irqc_in);
+    define_output_port_handler(0x20, 1, irqc_out);
+    define_input_port_handler(0x21, 1, imr_in);
+    define_output_port_handler(0x21, 1, imr_out);
 
-    define_input_port_handler(0xa0, irqc_in);
-    define_output_port_handler(0xa0, irqc_out);
-    define_input_port_handler(0xa1, imr_in);
-    define_output_port_handler(0xa1, imr_out);
+    define_input_port_handler(0xa0, 1, irqc_in);
+    define_output_port_handler(0xa0, 1, irqc_out);
+    define_input_port_handler(0xa1, 1, imr_in);
+    define_output_port_handler(0xa1, 1, imr_out);
 }

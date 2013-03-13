@@ -43,7 +43,9 @@ __FBSDID("$FreeBSD: projects/doscmd/int14.c,v 1.9 2002/03/30 13:51:40 dwmalone E
 #include <unistd.h>
 
 #include "doscmd.h"
+#if 0
 #include "AsyncIO.h"
+#endif
 #include "com.h"
 
 /* exports */
@@ -52,14 +54,18 @@ int fossil = 0;
 #define N_BYTES	1024
 
 struct com_data_struct {
+#if 0
 	int		fd;		/* BSD/386 file descriptor */
 	char		*path;		/* BSD/386 pathname */
+#endif
 	int		addr;		/* ISA I/O address */
 	unsigned char	irq;		/* ISA IRQ */
+#if 0
 	unsigned char	inbuf[N_BYTES];	/* input buffer */
 	unsigned char	outbuf[N_BYTES];/* output buffer */
 	int		ids;            /* input data size */
 	int		ods;            /* output data size */
+#endif
 	int		emptyint;
 	int		fossil_mode;	/* FOSSIL has been enabled */
 	struct termios	tty;
@@ -83,7 +89,8 @@ static unsigned char	com_port_in(int port);
 static void		com_port_out(int port, unsigned char val);
 static void		com_set_line(struct com_data_struct *cdsp,
 				     unsigned char port, unsigned char param);
- 
+static struct termios tio_new;
+
 #if 0
 static void
 manage_int(struct com_data_struct *cdsp)
@@ -100,7 +107,6 @@ manage_int(struct com_data_struct *cdsp)
  	}
  	unpend (cdsp->irq);
 }
-#endif
  
 static int
 has_enough_data(struct com_data_struct *cdsp)
@@ -121,9 +127,10 @@ input(struct com_data_struct *cdsp, int force_read)
 {
  	int nbytes;
  
+	debug(D_PORT, "input()\n");
  	if (cdsp->ids < N_BYTES && (force_read || !has_enough_data(cdsp))) {
-		nbytes = fread(&cdsp->inbuf[cdsp->ids], N_BYTES - cdsp->ids, 1,
-		    stdin);
+ 		nbytes = read(cdsp->fd, &cdsp->inbuf[cdsp->ids],
+		    N_BYTES - cdsp->ids);
  		debug(D_PORT, "read of fd %d on '%s' returned %d (%s)\n",
 		    cdsp->fd, cdsp->path, nbytes,
 		    nbytes == -1 ? strerror(errno) : "");
@@ -137,8 +144,9 @@ output(struct com_data_struct *cdsp)
 {
  	int nbytes;
  
+	debug(D_PORT, "output()\n");
  	if (cdsp->ods > 0) {
-		nbytes = fwrite(&cdsp->outbuf[0], cdsp->ods, 1, stdout);
+ 		nbytes = write(cdsp->fd, &cdsp->outbuf[0], cdsp->ods);
  		debug(D_PORT, "write of fd %d on '%s' returned %d (%s)\n",
 		    cdsp->fd, cdsp->path, nbytes,
 		    nbytes == -1 ? strerror(errno) : "");
@@ -153,7 +161,6 @@ output(struct com_data_struct *cdsp)
  	}
 }
  
-#if 0
 static void
 flush_out(void* arg)
 {
@@ -170,45 +177,47 @@ flush_out(void* arg)
 static int
 write_char(struct com_data_struct *cdsp, char c)
 {
- 	int r = 0;
- 	cdsp->emptyint = 0;
- 	if (cdsp->ods >= N_BYTES)
- 		output(cdsp);
- 	if (cdsp->ods < N_BYTES) {
- 		cdsp->outbuf[cdsp->ods ++] = c;
-#if 0
- 		if (!isinhardint(cdsp->irq))
-#endif
- 			output(cdsp);
- 		r = 1;
- 	}
-#if 0
- 	manage_int(cdsp);
-#endif
- 	return r;
+	debug(D_PORT, "write_char: %c\n", c);
+	if (write(STDOUT_FILENO, &c, 1) == 1)
+		return 1;
+	else
+		return 0;
 }
- 
+
+static bool
+avail_char(struct com_data_struct *cdsp)
+{
+        fd_set rfds;
+        struct timeval tv;
+
+        FD_ZERO(&rfds);
+        FD_SET(STDIN_FILENO, &rfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+        if (select(STDIN_FILENO + 1, &rfds, NULL, NULL, &tv) > 0) {
+		return (true);
+	} else {
+		return (false);
+	}
+}
+
+
 static int
 read_char(struct com_data_struct *cdsp)
 {
- 	int c = -1;
- 
- 	input(cdsp, 0);
- 
- 	if (cdsp->ids > 0) {
- 		c = cdsp->inbuf[0];
- 		cdsp->ids --;
- 		memmove(&cdsp->inbuf[0], &cdsp->inbuf[1], cdsp->ids);
- 	}
- 
-#if 0
- 	manage_int(cdsp);
-#endif
- 
- 	debug(D_PORT, "read_char: %x\n", c);
- 	return c;
+	char c;
+	if (avail_char(cdsp)) {
+		if (read(STDIN_FILENO, &c, 1) == 1) {
+ 			debug(D_PORT, "read_char: %c\n", c);
+		 	return c;
+		}else{
+			return -1;
+		}
+	}
+	return -1;
 }
  
+#if 0
 static void
 new_ii(struct com_data_struct *cdsp)
 {
@@ -218,18 +227,14 @@ new_ii(struct com_data_struct *cdsp)
  	manage_int(cdsp);
 #endif
 }
+#endif
  
 static unsigned char
 get_status(struct com_data_struct *cdsp)
 {
  	unsigned char s = (LS_X_DATA_E | LS_X_HOLD_E);
- 	if (cdsp->ids > 0)
+ 	if (avail_char(cdsp))
  		s |= LS_RCV_DATA_RD;
- 	if (cdsp->ods > 0) {
- 		s &= ~LS_X_DATA_E;
- 		if (cdsp->ods >= N_BYTES)
- 			s &= ~LS_X_HOLD_E;
- 	}
  	debug(D_PORT, "get_status: %x\n", (unsigned)s);
  	return s;
 }
@@ -238,18 +243,9 @@ static unsigned char
 get_int_id(struct com_data_struct *cdsp)
 {
  	unsigned char s = II_PEND_INT;
- 	if (cdsp->fifo_ctrl & FC_FIFO_EN)
- 		s |= II_FIFOS_EN;
- 	if ((cdsp->int_enable & IE_RCV_DATA) && cdsp->ids > 0) {
- 		if (has_enough_data(cdsp))
- 			s = (s & ~II_PEND_INT) | II_RCV_DATA;
- 		else
- 			s = (s & ~II_PEND_INT) | II_TO;
- 	} else
- 	if ((cdsp->int_enable & IE_TRANS_HLD) && cdsp->emptyint) {
- 		cdsp->emptyint = 0;
- 		s = (s & ~II_PEND_INT) | II_TRANS_HLD;
- 	}
+	if (avail_char(cdsp))
+		s |= II_RCV_DATA;
+
  	debug(D_PORT, "get_int_id: %x\n", (unsigned)s);
  	return s;
 }
@@ -266,7 +262,9 @@ com_async(int fd __unused, int cond, void *arg, regcontext_t *REGS __unused)
  		input(cdsp, 1);
  	if (cond & AS_WR)
  		output(cdsp);
+#if 0
  	manage_int(cdsp);
+#endif
 }
 #endif
 
@@ -539,7 +537,6 @@ static void
 com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char param)
 {
 #if 0
-    struct stat stat_buf;
     int mode = 0;		/* read | write */
 #endif
     int reg_num, ret_val, spd, speed;
@@ -556,19 +553,20 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
 	debug(D_PORT, "Initialize serial port com%d\n", port);
     }
     
-    stat(cdsp->path, &stat_buf);
-    if (!S_ISCHR(stat_buf.st_mode) ||
-	((cdsp->fd = open(cdsp->path, O_RDWR | O_NONBLOCK, 0666)) == -1)) {
+    if ((cdsp->fd = open(cdsp->path, O_RDWR | O_NONBLOCK, 0666)) == -1) {
 	
 	debug(D_PORT,
 	      "Could not initialize serial port com%d on path '%s'\n",
 	      port, cdsp->path);
-	return;
+	abort();
     }
 #endif
     cdsp->param = param;
     
+#if 0
     cdsp->ids = cdsp->ods = cdsp->emptyint = 0;
+#endif
+    cdsp->emptyint = 0;
     cdsp->int_enable = 0;
     cdsp->fifo_ctrl = 0;
     cdsp->modem_ctrl = 0;
@@ -688,11 +686,11 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
 	TIOCFLUSH, cdsp->fd, mode, ret_val, errno);
 #endif
     for (reg_num = 0; reg_num < N_OF_COM_REGS; reg_num++) {
-	define_input_port_handler(cdsp->addr + reg_num, com_port_in);
-	define_output_port_handler(cdsp->addr + reg_num, com_port_out);
+	define_input_port_handler(cdsp->addr + reg_num, 1, com_port_in);
+	define_output_port_handler(cdsp->addr + reg_num, 1, com_port_out);
     }
     debug(D_PORT, "com%d: attached '%s' at addr 0x%04x irq %d\n",
-	port, cdsp->path, cdsp->addr, cdsp->irq);
+	port, NULL, cdsp->addr, cdsp->irq);
 
 #if 0
     set_eoir(cdsp->irq, flush_out, cdsp);
@@ -726,8 +724,8 @@ try_set_speed(struct com_data_struct *cdsp)
     ret_val = cfsetospeed(&cdsp->tty, speed);
     debug(D_PORT, "try_set_speed: cfsetospeed returned 0x%X.\n", ret_val);
  
-#if 0
     errno = 0;
+#if 0
     ret_val = tcsetattr(cdsp->fd, 0, &cdsp->tty);
     debug(D_PORT, "try_set_speed: tcsetattr returned 0x%X (%s).\n", ret_val,
 	  ret_val == -1 ? strerror (errno) : "");
@@ -743,15 +741,22 @@ init_com(int port, char *path, int addr, unsigned char irq)
     debug(D_PORT, "init_com: port = 0x%04x, addr = 0x%04X, irq = %d.\n",
 	  port, addr, irq);
     cdsp = &(com_data[port]);
+#if 0
     cdsp->path = path;	/* XXX DEBUG strcpy? */
+#endif
     cdsp->addr = addr;
     cdsp->irq = irq;
+#if 0
     cdsp->fd = -1;
+#endif
     com_set_line(cdsp, port + 1, TXLEN_8BITS | BITRATE_9600);
 
     /* update BIOS variables */
     nserial++;
     *(u_int16_t *)&BIOSDATA[0x00 + 2 * port] = (u_int16_t)addr;
+
+    cfmakeraw(&tio_new);
+    tcsetattr(STDIN_FILENO, TCSANOW, &tio_new);	
 }
 
 /* called when DOS wants to read directly from a physical port */
@@ -831,6 +836,7 @@ com_port_in(int port)
 	      port, cdsp->addr);
 	break;
     }
+    debug(D_PORT, "%s port:%x val:%x\n", __func__, port, rs);
     return rs;
 }
 
@@ -870,13 +876,16 @@ com_port_out(int port, unsigned char val)
 	    cdsp->div_latch[DIV_LATCH_HIGH] = val;
 	    try_set_speed(cdsp);
 	} else {
+#if 0
 	    cdsp->int_enable = val;
 	    new_ii(cdsp);
+#endif
 	}
 	break;
 	
 	/* 0x03FA - FIFO control register */
     case 2:
+#if 0
 	cdsp->fifo_ctrl = val & (FC_FIFO_EN | FC_FIFO_SZ_MASK);
 	if (val & FC_FIFO_CRV)
 	    cdsp->ids = 0;
@@ -885,7 +894,6 @@ com_port_out(int port, unsigned char val)
 	    cdsp->emptyint = 1;
 	}
 	input(cdsp, 1);
-#if 0
 	manage_int(cdsp);
 #endif
 	break;

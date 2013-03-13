@@ -49,6 +49,7 @@ __FBSDID("$FreeBSD: projects/doscmd/doscmd.c,v 1.25 2002/03/07 12:52:26 obrien E
 
 #include <machine/param.h>
 #include <machine/vmparam.h>
+#include <machine/specialreg.h>
 
 #include <sys/proc.h>
 #include <machine/sysarch.h>
@@ -64,6 +65,7 @@ __FBSDID("$FreeBSD: projects/doscmd/doscmd.c,v 1.25 2002/03/07 12:52:26 obrien E
 #include "video.h"
 #include "com.h"
 
+#include <udis86/udis86.h>
 /* exports */
 int		capture_fd = -1;
 int		dead = 0;
@@ -123,6 +125,7 @@ static int get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs);
 
 regcontext_t *saved_regcontext;
 int trace_mode;
+FILE *tracef;
 
 /* lobotomise */
 void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace)
@@ -134,8 +137,8 @@ void biosemul_init(struct vmctx *ctx, int vcpu, char *lomem, int trace)
 
     init_ints();
 
-    debugf = stderr;
-//    debugf = fopen("biosemul.log", "w");
+    debugf = fopen("biosemul.log", "w");
+    tracef = fopen("trace.log", "w");
 
     /* Call init functions */
 #if 0
@@ -808,224 +811,221 @@ iomap_port(int port, int count)
 }
 #endif
 
+#define GET_REG(regname, vmmregname) \
+{ \
+	int error = 0; \
+	reg86_t *r; \
+	r = &regs->r.regname; \
+	error = vm_get_register(ctx, vcpu, vmmregname, &r->r_rx); \
+	assert(error == 0); \
+}
+
+#define GET_SEG(regname, vmmregname) \
+{ \
+	int error = 0; \
+	uint32_t desc_limit, desc_access; \
+	reg86_t *r; \
+	r = &regs->r.regname; \
+	error = vm_get_desc(ctx, vcpu, vmmregname, &r->r_rx, &desc_limit, \
+	    &desc_access); \
+	assert(error == 0); \
+}
+
 static int
 get_all_regs(struct vmctx *ctx, int vcpu, regcontext_t *regs)
 {
-	uint32_t desc_limit, desc_access;
-	int error = 0;
+	GET_REG(gs, VM_REG_GUEST_GS);
+	GET_REG(fs, VM_REG_GUEST_FS);
+	GET_REG(es, VM_REG_GUEST_ES);
+	GET_REG(ds, VM_REG_GUEST_DS);
+	GET_REG(edi, VM_REG_GUEST_RDI);
+	GET_REG(esi, VM_REG_GUEST_RSI);
+	GET_REG(ebp, VM_REG_GUEST_RBP);
+	GET_REG(ebx, VM_REG_GUEST_RBX);
+	GET_REG(edx, VM_REG_GUEST_RDX);
+	GET_REG(ecx, VM_REG_GUEST_RCX);
+	GET_REG(eax, VM_REG_GUEST_RAX);
+	GET_REG(eip, VM_REG_GUEST_RIP);
+	GET_REG(cs, VM_REG_GUEST_CS);
+	GET_REG(efl, VM_REG_GUEST_RFLAGS);
+	GET_REG(esp, VM_REG_GUEST_RSP);
+	GET_REG(ss, VM_REG_GUEST_SS);
+	GET_REG(cr0, VM_REG_GUEST_CR0);
+	GET_SEG(idtr, VM_REG_GUEST_IDTR);
+	GET_SEG(gdtr, VM_REG_GUEST_GDTR);
 
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_GS, &regs->r.gs.r_rx)) != 0)
-		goto done;
+	return (0);
+}
 
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_FS, &regs->r.fs.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_ES, &regs->r.es.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_DS, &regs->r.ds.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RDI, &regs->r.edi.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RSI, &regs->r.esi.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RBP, &regs->r.ebp.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RBX, &regs->r.ebx.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RDX, &regs->r.edx.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RCX, &regs->r.ecx.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RAX, &regs->r.eax.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RSP, &regs->r.esp.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_SS, &regs->r.ss.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RIP, &regs->r.eip.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_CS, &regs->r.cs.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, &regs->r.efl.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_register(ctx, vcpu, VM_REG_GUEST_CR0, &regs->r.cr0.r_rx)) != 0)
-		goto done;
-
-	if ((error = vm_get_desc(ctx, vcpu, VM_REG_GUEST_IDTR, &regs->r.idtr.r_rx, &desc_limit, &desc_access)) != 0)
-		goto done;
-
-	if ((error = vm_get_desc(ctx, vcpu, VM_REG_GUEST_GDTR, &regs->r.gdtr.r_rx, &desc_limit, &desc_access)) != 0)
-		goto done;
-done:
-	return (error);
+#define SET_MODIFIED_REG(regname, vmmregname) \
+{ \
+	int error = 0; \
+	reg86_t *r1, *r2; \
+	r1 = &orig->r.regname; \
+	r2 = &modified->r.regname; \
+	if (r1->r_rx != r2->r_rx) { \
+	    debug(D_ALWAYS, "%s " #regname ":%lx\n", __func__, r2->r_rx); \
+	    error = vm_set_register(ctx, vcpu, vmmregname, r2->r_rx); \
+	    assert(error == 0); \
+	} \
 }
 
 static int
 set_modified_regs(struct vmctx *ctx, int vcpu, regcontext_t *orig, regcontext_t *modified)
 {
-	int error = 0;
+	SET_MODIFIED_REG(gs, VM_REG_GUEST_GS);
+	SET_MODIFIED_REG(fs, VM_REG_GUEST_FS);
+	SET_MODIFIED_REG(es, VM_REG_GUEST_ES);
+	SET_MODIFIED_REG(ds, VM_REG_GUEST_DS);
+	SET_MODIFIED_REG(edi, VM_REG_GUEST_RDI);
+	SET_MODIFIED_REG(esi, VM_REG_GUEST_RSI);
+	SET_MODIFIED_REG(ebp, VM_REG_GUEST_RBP);
+	SET_MODIFIED_REG(ebx, VM_REG_GUEST_RBX);
+	SET_MODIFIED_REG(edx, VM_REG_GUEST_RDX);
+	SET_MODIFIED_REG(ecx, VM_REG_GUEST_RCX);
+	SET_MODIFIED_REG(eax, VM_REG_GUEST_RAX);
+	SET_MODIFIED_REG(eip, VM_REG_GUEST_RIP);
+	SET_MODIFIED_REG(cs, VM_REG_GUEST_CS);
+	SET_MODIFIED_REG(efl, VM_REG_GUEST_RFLAGS);
+	SET_MODIFIED_REG(esp, VM_REG_GUEST_RSP);
+	SET_MODIFIED_REG(ss, VM_REG_GUEST_SS);
+	SET_MODIFIED_REG(cr0, VM_REG_GUEST_CR0);
 
-	if ((orig->r.gs.r_rx != modified->r.gs.r_rx) &&
-	    fprintf(debugf, "%s gs:%lx\n", __func__, modified->r.gs.r_rx) &&
-	    (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_GS, modified->r.gs.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.fs.r_rx != modified->r.fs.r_rx) &&
-	    fprintf(debugf, "%s fs:%lx\n", __func__, modified->r.fs.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_FS, modified->r.fs.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.es.r_rx != modified->r.es.r_rx) &&
-	    fprintf(debugf, "%s es:%lx\n", __func__, modified->r.es.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_ES, modified->r.es.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.ds.r_rx != modified->r.ds.r_rx) &&
-	    fprintf(debugf, "%s ds:%lx\n", __func__, modified->r.ds.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_DS, modified->r.ds.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.edi.r_rx != modified->r.edi.r_rx) &&
-	    fprintf(debugf, "%s edi:%lx\n", __func__, modified->r.edi.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RDI, modified->r.edi.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.esi.r_rx != modified->r.esi.r_rx) &&
-	    fprintf(debugf, "%s esi:%lx\n", __func__, modified->r.esi.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RSI, modified->r.esi.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.ebp.r_rx != modified->r.ebp.r_rx) &&
-	    fprintf(debugf, "%s ebp:%lx\n", __func__, modified->r.ebp.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RBP, modified->r.ebp.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.ebx.r_rx != modified->r.ebx.r_rx) &&
-	    fprintf(debugf, "%s ebx:%lx\n", __func__, modified->r.ebx.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RBX, modified->r.ebx.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.edx.r_rx != modified->r.edx.r_rx) &&
-	    fprintf(debugf, "%s edx:%lx\n", __func__, modified->r.edx.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RDX, modified->r.edx.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.ecx.r_rx != modified->r.ecx.r_rx) &&
-	    fprintf(debugf, "%s ecx:%lx\n", __func__, modified->r.ecx.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RCX, modified->r.ecx.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.eax.r_rx != modified->r.eax.r_rx) &&
-	    fprintf(debugf, "%s eax:%lx\n", __func__, modified->r.eax.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RAX, modified->r.eax.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.esp.r_rx != modified->r.esp.r_rx) &&
-	    fprintf(debugf, "%s esp:%lx\n", __func__, modified->r.esp.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RSP, modified->r.esp.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.ss.r_rx != modified->r.ss.r_rx) &&
-	    fprintf(debugf, "%s ss:%lx\n", __func__, modified->r.ss.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_SS, modified->r.ss.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.eip.r_rx != modified->r.eip.r_rx) &&
-	    fprintf(debugf, "%s eip:%lx\n", __func__, modified->r.eip.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RIP, modified->r.eip.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.cs.r_rx != modified->r.cs.r_rx) &&
-	    fprintf(debugf, "%s cs:%lx\n", __func__, modified->r.cs.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_CS, modified->r.cs.r_rx)) != 0)
-		goto done;
-
-	if ((orig->r.efl.r_rx != modified->r.efl.r_rx) &&
-	    fprintf(debugf, "%s eflags:%lx\n", __func__, modified->r.efl.r_rx) &&
-	   (error = vm_set_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, modified->r.efl.r_rx)) != 0)
-		goto done;
-done:
-	
-	return (error);
+	return (0);
 }
 
 extern void int13(regcontext_t *REGS);
 
+#if 0
+void
+exc_dump(regcontext_t *REGS)
+{
+	u_int32_t esp, exception, error_code, eip, cs, eflags, old_esp, ss, eip_off;
+	ud_t ud_obj;
+
+	ud_init(&ud_obj);
+	ud_set_syntax(&ud_obj, UD_SYN_ATT);
+	ud_set_vendor(&ud_obj, UD_VENDOR_INTEL);
+
+	esp = R_ESP;
+	exception = *(uint32_t *)(lomem_addr + esp);
+	esp += 4;
+	error_code = *(uint32_t *)(lomem_addr + esp);
+	esp += 4;
+	eip = *(uint32_t *)(lomem_addr + esp);
+	esp += 4;
+	cs = *(uint32_t *)(lomem_addr + esp);
+	esp += 4;
+	eflags = *(uint32_t *)(lomem_addr + esp);
+	*(uint32_t *)(lomem_addr + esp) |= 0x100;
+	esp += 4;
+	if (cs & 0x3) {
+		old_esp = *(uint32_t *)(lomem_addr + esp);
+		esp += 4;
+		ss =  *(uint32_t *)(lomem_addr + esp);
+		eip_off = 0xa000;
+	} else {
+		old_esp = esp;
+		ss = R_SS;
+		eip_off = 0x0;
+	}
+
+	ud_set_mode(&ud_obj, 32);
+	ud_set_pc(&ud_obj, eip);
+	ud_set_input_buffer(&ud_obj, lomem_addr + eip + eip_off, 16);
+	ud_disassemble(&ud_obj);
+
+	fprintf(stderr, "32bit-%s exception:%d error_code:%x eip:%x cs:%x eflags:%x ss:%x esp:%x", 
+		cs & 0x3 ? "user" : "kern", exception, error_code, eip, cs, eflags, ss, old_esp);
+	fprintf(stderr, " insn:%s", ud_insn_asm(&ud_obj));
+	fprintf(stderr, " ds:%x cr0:%x eax:%x ebx:%x ecx:%x edx:%x\n",
+			R_DS, R_CR0, R_EAX, R_EBX, R_ECX, R_EDX);
+}
+#endif
+
+void
+vmcall_dump(regcontext_t *REGS)
+{
+	ud_t ud_obj;
+	uint32_t eip_off;
+
+	ud_init(&ud_obj);
+	ud_set_syntax(&ud_obj, UD_SYN_ATT);
+	ud_set_vendor(&ud_obj, UD_VENDOR_INTEL);
+	ud_set_mode(&ud_obj, R_CR0 & CR0_PE ? 32:16);
+	ud_set_pc(&ud_obj, R_EIP);
+	eip_off = (R_CR0 & CR0_PE && R_CS & 0x3) ? 0xa000 : 0;
+	ud_set_input_buffer(&ud_obj, lomem_addr + R_EIP + eip_off, 16);
+	ud_disassemble(&ud_obj);
+	fprintf(tracef, "%dbit%s ip:%x cs:%x flags:%x sp:%x", 
+		R_CR0 & CR0_PE ? 32:16,
+		(R_CR0 & CR0_PE) ? (R_CS & 0x3) ? "-user" : "-kern" : "",
+		R_EIP, R_CS, R_EFLAGS, R_ESP);
+	fprintf(tracef, " insn:%s", ud_insn_asm(&ud_obj));
+	fprintf(tracef, " ds:%x ss:%x cr0:%x eax:%x ebx:%x ecx:%x edx:%x\n",
+		R_DS, R_SS, R_CR0, R_EAX, R_EBX, R_ECX, R_EDX);
+	R_EFLAGS |= 0x100;
+}
+
+
 int
-biosemul_call(struct vmctx *ctx, int vcpu)
+biosemul_call(struct vmctx *ctx, struct vm_exit *vmexit __unused, int vcpu)
 {
 	int ret = 0;
 	regcontext_t orig, modified;
 	regcontext_t *REGS = &modified;
 
 	get_all_regs(ctx, vcpu, &orig);
-#if 0
-	{
-		u_int16_t *sp, eip, cs, efl;
-	
-		sp = (uint16_t *)(lomem_addr + orig.r.esp.r_rx);
-		eip = *sp;
-		cs = *(--sp);
-		efl = *(--sp);
-		fprintf(stderr, "%s eip:%x cs:%x efl:%x\n", 
-			__func__, eip, cs, efl);
-	}
-#endif
 	modified = orig;
+	if (R_CR0 & CR0_PE) {
+		switch (R_EIP) {
+		case 0x918f: /* ex_db */
+			fprintf(tracef, "[trace] ");
+			int01(&modified);
+			break;
 #if 0
-	fprintf(stderr, "%s orig RAX=%lx EAX=%x AX=%x AL=%x AH=%x\n",
-		__func__, 
-		orig.r.eax.r_rx,
-		orig.r.eax.r_dw.r_ex,
-		orig.r.eax.r_w.r_x,
-		orig.r.eax.r_b.r_l,
-		orig.r.eax.r_b.r_h);
-	fprintf(stderr, "%s orig RBX=%lx EBX=%x BX=%x BL=%x BH=%x\n",
-		__func__, 
-		orig.r.ebx.r_rx,
-		orig.r.ebx.r_dw.r_ex,
-		orig.r.ebx.r_w.r_x,
-		orig.r.ebx.r_b.r_l,
-		orig.r.ebx.r_b.r_h);
-	fprintf(stderr, "%s modified RAX=%lx EAX=%x AX=%x AL=%x AH=%x\n",
-		__func__, 
-		modified.r.eax.r_rx,
-		modified.r.eax.r_dw.r_ex,
-		modified.r.eax.r_w.r_x,
-		modified.r.eax.r_b.r_l,
-		modified.r.eax.r_b.r_h);
-	fprintf(stderr, "%s modified RBX=%lx EBX=%x BX=%x BL=%x BH=%x\n",
-		__func__, 
-		modified.r.ebx.r_rx,
-		modified.r.ebx.r_dw.r_ex,
-		modified.r.ebx.r_w.r_x,
-		modified.r.ebx.r_b.r_l,
-		modified.r.ebx.r_b.r_h);
+		case 0x9193: /* ex_noc */
+			fprintf(tracef, "[ex_noc] ");
+			exc_dump(&modified);
+			break;
+		case 0x919e: /* except */
+			fprintf(tracef, "[except] ");
+			exc_dump(&modified);
+			break;
+		case 0x924e: /* intx31 */
+			fprintf(tracef, "[intx31] ");
+			vmcall_dump(&modified);
+			break;
+		case 0x93f3:
+			fprintf(tracef, "[intx30] ");
+			vmcall_dump(&modified);
+			break;
+		case 0x9253: /* int_hw */
+			fprintf(tracef, "[int_hw] ");
+			vmcall_dump(&modified);
+			break;
 #endif
-//	fprintf(stderr, "%s R_CS:%x R_IP:%x MAKEVEC(R_CS, R_IP):%x\n", 
-//		__func__, R_CS, R_IP, MAKEVEC(R_CS, R_IP));
-
-	callback_t func = find_callback(MAKEVEC(R_CS, R_IP));
-	if (func)
-		func(&modified);
-
-	if (trace_mode && MAKEVEC(R_CS, R_IP) != ivec[0x01])
+		default:
+			fprintf(tracef, "[default] ");
+			vmcall_dump(&modified);
+			break;
+		}
+	} else if (R_IP > 0x400) { 
+		fprintf(tracef, "[eip > 0x400] ");
+		vmcall_dump(&modified);
+	} else if (MAKEVEC(R_CS, R_IP) == ivec[0x01]) {
+		fprintf(tracef, "[trace] ");
+		int01(&modified);
+	} else if (MAKEVEC(R_CS, R_IP) != ivec[0x01]) {
+		callback_t func = find_callback(MAKEVEC(R_CS, R_IP));
+		if (func)
+			func(&modified);
+		fprintf(tracef, "[bioscall] ");
+		int01(&modified);
 		R_EFLAGS |= 0x100;
+	}
 	set_modified_regs(ctx, vcpu, &orig, &modified);
+	fflush(tracef);
 
 	return (ret);
 }
@@ -1044,11 +1044,28 @@ int biosemul_inout(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 	modified = orig;
 	saved_regcontext = &modified;
 
+	debug(D_ALWAYS, "%s vcpu:%d in:%d port:%x bytes:%d\n",
+	    __func__, vcpu, in, port, bytes);
 	if (in)
-		inb(&modified, port);
+		if (bytes == 1)
+			inb(&modified, port);
+		else if (bytes == 2)
+			inw(&modified, port);
+		else if (bytes == 4)
+			inl(&modified, port);
+		else
+			fprintf(stderr, "%s invalid io bytes:%d\n",
+				__func__, bytes);
 	else
-		outb(&modified, port);
-
+		if (bytes == 1)
+			outb(&modified, port);
+		else if (bytes == 2)
+			outw(&modified, port);
+		else if (bytes == 4)
+			outl(&modified, port);
+		else
+			fprintf(stderr, "%s invalid io bytes:%d\n",
+				__func__, bytes);
 	set_modified_regs(ctx, vcpu, &orig, &modified);
 
 	return 0;

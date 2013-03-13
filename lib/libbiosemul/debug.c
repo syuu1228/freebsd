@@ -98,6 +98,7 @@ debug(int flags, const char *fmt, ...)
 	va_start (args, fmt);
 	vfprintf (debugf, fmt, args);
 	va_end (args);
+	fflush(debugf);
 #if 0
     }
 #endif
@@ -140,6 +141,7 @@ fatal(const char *fmt, ...)
     fprintf (debugf, "doscmd: fatal error ");
     vfprintf (debugf, fmt, args);
     va_end (args);
+    fflush(debugf);
 #if 0
     quit (1);
 #endif
