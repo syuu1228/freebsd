@@ -56,6 +56,7 @@ static u_int			smaplen;
 void
 bios_getsmap(void)
 {
+#if 0
 	struct smap_buf		buf;
 	STAILQ_HEAD(smap_head, smap_buf) head =
 	    STAILQ_HEAD_INITIALIZER(head);
@@ -116,6 +117,7 @@ bios_getsmap(void)
 			cur = next;
 		}
 	}
+#endif
 }
 
 void

@@ -212,7 +212,7 @@ init.8: 	xorl %ecx,%ecx			# Zero
 		movb $SEL_UDATA,%cl		# User data selector
 		pushl %ecx			# Set SS
 		pushl %eax			# Set ESP
-		push $0x202			# Set flags (IF set)
+		push $0x302			# Set flags (IF set)
 		push $SEL_UCODE			# Set CS
 		pushl btx_hdr+0xc		# Set EIP
 		pushl %ecx			# Set GS
@@ -312,8 +312,9 @@ setpic: 	in $0x21,%al			# Save master
  */
 intx00: 	push $0x0			# Int 0x0: #DE
 		jmp ex_noc			# Divide error
-		push $0x1			# Int 0x1: #DB
-		jmp ex_noc			# Debug
+		nop
+		nop				# Int 0x1: #DB
+		jmp ex_db			# Debug
 		push $0x3			# Int 0x3: #BP
 		jmp ex_noc			# Breakpoint
 		push $0x4			# Int 0x4: #OF
@@ -338,6 +339,10 @@ intx00: 	push $0x0			# Int 0x0: #DE
 		jmp except			# Page fault
 intx10: 	push $0x10			# Int 0x10: #MF
 		jmp ex_noc			# Floating-point error
+
+ex_db:		vmcall
+		iret
+
 /*
  * Save a zero error code.
  */
@@ -503,7 +508,7 @@ int_hw: 	cld				# String ops inc
 		movl -0x08(%esi),%ebx		# Save user flags in %ebx
 		testl $V86F_ADDR,%edx		# Segment:offset?
 		jnz intusr.4			# Yes
-		andl $~(PSL_I|PSL_T|PSL_AC),%ebx # Disable interrupts, tracing,
+		andl $~(PSL_I|PSL_AC),%ebx 	# Disable interrupts, tracing,
 						#  and alignment checking for
 						#  interrupt handler
 		jmp intusr.3			# Skip hardware interrupt
@@ -565,6 +570,15 @@ intusr.6:	movl -0x08(%esi),%ebx		# Copy user flags to real
 		movl $rret_tramp,%ebx		# Set return trampoline
 		movl %ebx,MEM_ESPR-0x10		#  CS:IP
 		movl %eax,MEM_ESPR-0x16		# Real mode target CS:IP
+
+		/*
+		pushfl				# disable tracing
+		popl %eax
+		andl $~0x100, %eax
+		pushl %eax
+		popfl
+		*/
+
 		ljmpw $SEL_RCODE,$intusr.7	# Change to 16-bit segment
 		.code16
 intusr.7:	movl %cr0,%eax			# Leave
@@ -616,6 +630,15 @@ rret_tramp:	movw $MEM_ESPR-0x08,%sp		# Reset stack pointer
 		xorw %ax,%ax			# Reset seg 
 		movw %ax,%ds			#  regs
 		movw %ax,%es			#  (%ss is already 0)
+
+		/*
+		pushfl				# disable tracing
+		popl %eax
+		andl $~0x100, %eax
+		pushl %eax
+		popfl
+		*/
+
 		lidt idtdesc	 		# Set IDT
 		lgdt gdtdesc	 		# Set GDT
 		mov %cr0,%eax			# Switch to protected
@@ -690,7 +713,7 @@ rret_tramp.3:	popl %es			# Restore
 /*
  * System Call.
  */
-intx30: 	cmpl $SYS_EXEC,%eax		# Exec system call?
+intx30:		cmpl $SYS_EXEC,%eax		# Exec system call?
 		jne intx30.1			# No
 		pushl %ss			# Set up
 		popl %es			#  all

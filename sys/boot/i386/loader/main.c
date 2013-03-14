@@ -124,6 +124,8 @@ main(void)
      * If the previous boot stage has requested a serial console, prefer that.
      */
     bi_setboothowto(initial_howto);
+    initial_howto &= ~(RB_MULTIPLE);
+    initial_howto |= RB_SERIAL;
     if (initial_howto & RB_MULTIPLE) {
 	if (initial_howto & RB_SERIAL)
 	    setenv("console", "comconsole vidconsole", 1);
@@ -169,8 +171,10 @@ main(void)
      * March through the device switch probing for things.
      */
     for (i = 0; devsw[i] != NULL; i++)
-	if (devsw[i]->dv_init != NULL)
+	if (devsw[i]->dv_init != NULL) {
+		printf("%s dv_init:%p\n", __func__, devsw[i]->dv_init);
 	    (devsw[i]->dv_init)();
+	}
     printf("BIOS %dkB/%dkB available memory\n", bios_basemem / 1024, bios_extmem / 1024);
     if (initial_bootinfo != NULL) {
 	initial_bootinfo->bi_basemem = bios_basemem / 1024;

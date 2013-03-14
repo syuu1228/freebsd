@@ -152,11 +152,15 @@ comc_putchar(int c)
 {
     int wait;
 
+#if 0
     for (wait = COMC_TXWAIT; wait > 0; wait--)
         if (inb(comc_port + com_lsr) & LSR_TXRDY) {
+#endif
 	    outb(comc_port + com_data, (u_char)c);
+#if 0
 	    break;
 	}
+#endif
 }
 
 static int
@@ -168,7 +172,10 @@ comc_getchar(void)
 static int
 comc_ischar(void)
 {
+	/*
     return (inb(comc_port + com_lsr) & LSR_RXRDY);
+    */
+	return 1;
 }
 
 static int
@@ -317,9 +324,11 @@ comc_setup(int speed, int port)
     outb(comc_port + com_mcr, MCR_RTS | MCR_DTR);
 
     tries = 0;
+#if 0
     do
         inb(comc_port + com_data);
     while (inb(comc_port + com_lsr) & LSR_RXRDY && ++tries < TRY_COUNT);
+#endif
 
     if (tries < TRY_COUNT) {
 	comconsole.c_flags |= (C_PRESENTIN | C_PRESENTOUT);

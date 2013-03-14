@@ -28,6 +28,10 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include <stand.h>
+#include <bootstrap.h>
+#include <machine/cpufunc.h>
+
 /*
  * BIOS disk device handling.
  * 
@@ -156,7 +160,9 @@ bd_init(void)
 
 	/* sequence 0, 0x80 */
 	for (base = 0; base <= 0x80; base += 0x80) {
+		printf("%s base:%x\n", __func__, base);
 		for (unit = base; (nbdinfo < MAXBDDEV); unit++) {
+#if 0
 #ifndef VIRTUALBOX
 			/*
 			 * Check the BIOS equipment list for number
@@ -165,6 +171,7 @@ bd_init(void)
 			if(base == 0x80 &&
 			    (nfd >= *(unsigned char *)PTOV(BIOS_NUMDRIVES)))
 				break;
+#endif
 #endif
 			bdinfo[nbdinfo].bd_unit = unit;
 			bdinfo[nbdinfo].bd_flags = unit < 0x80 ? BD_FLOPPY: 0;
@@ -197,6 +204,18 @@ bd_int13probe(struct bdinfo *bd)
 {
 	struct edd_params params;
 
+	printf("%s unit:%x\n", __func__, bd->bd_unit);
+	if (bd->bd_unit == 0x80) {
+		bd->bd_sectors = 50000;
+		bd->bd_sectorsize = BIOSDISK_SECSIZE;
+		bd->bd_flags |= BD_MODEEDD1;
+		DEBUG("unit 0x%x flags %x, sectors %llu, sectorsize %u",
+		    bd->bd_unit, bd->bd_flags, bd->bd_sectors, bd->bd_sectorsize);
+
+		return (1);
+	}else
+		return (0);
+#if 0
 	v86.ctl = V86_FLAGS;
 	v86.addr = 0x13;
 	v86.eax = 0x800;
@@ -253,6 +272,7 @@ bd_int13probe(struct bdinfo *bd)
 	DEBUG("unit 0x%x flags %x, sectors %llu, sectorsize %u",
 	    bd->bd_unit, bd->bd_flags, bd->bd_sectors, bd->bd_sectorsize);
 	return (1);
+#endif
 }
 
 /*
@@ -422,10 +442,25 @@ bd_realstrategy(void *devdata, int rw, daddr_t dblk, size_t size, char *buf,
 /* Max number of sectors to bounce-buffer if the request crosses a 64k boundary */
 #define FLOPPY_BOUNCEBUF	18
 
+#define BIOSEMUL_DISK_LBA	0x300
+#define BIOSEMUL_DISK_COUNT	0x301
+#define BIOSEMUL_DISK_ADDR	0x302
+#define BIOSEMUL_DISK_COMMAND 	0x303
+#define BIOSEMUL_DISK_COMMAND_READ 0
+#define BIOSEMUL_DISK_COMMAND_WRITE 1
+
 static int
 bd_edd_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest,
     int write)
 {
+	outl(BIOSEMUL_DISK_LBA, dblk);
+	outl(BIOSEMUL_DISK_COUNT, blks);
+	outl(BIOSEMUL_DISK_ADDR, VTOP(dest));
+	outl(BIOSEMUL_DISK_COMMAND, !write ? BIOSEMUL_DISK_COMMAND_READ :
+	    BIOSEMUL_DISK_COMMAND_WRITE);
+	return (0);
+
+#if 0
     static struct edd_packet packet;
 
     packet.len = sizeof(struct edd_packet);
@@ -445,8 +480,10 @@ bd_edd_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest,
     v86.esi = VTOPOFF(&packet);
     v86int();
     return (V86_CY(v86.efl));
+#endif
 }
 
+#if 0
 static int
 bd_chs_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest,
     int write)
@@ -480,6 +517,7 @@ bd_chs_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest,
     v86int();
     return (V86_CY(v86.efl));
 }
+#endif
 
 static int
 bd_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest, int write)
@@ -547,6 +585,7 @@ bd_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest, int write)
 	 */
 	for (retry = 0; retry < 3; retry++) {
 	    /* if retrying, reset the drive */
+#if 0
 	    if (retry > 0) {
 		v86.ctl = V86_FLAGS;
 		v86.addr = 0x13;
@@ -554,11 +593,14 @@ bd_io(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest, int write)
 		v86.edx = BD(dev).bd_unit;
 		v86int();
 	    }
+#endif
 
 	    if (BD(dev).bd_flags & BD_MODEEDD1)
 		result = bd_edd_io(dev, dblk, x, xp, write);
+#if 0
 	    else
 		result = bd_chs_io(dev, dblk, x, xp, write);
+#endif
 	    if (result == 0)
 		break;
 	}
@@ -614,7 +656,7 @@ bd_write(struct disk_devdesc *dev, daddr_t dblk, int blks, caddr_t dest)
 u_int32_t
 bd_getbigeom(int bunit)
 {
-
+#if 0
     v86.ctl = V86_FLAGS;
     v86.addr = 0x13;
     v86.eax = 0x800;
@@ -624,6 +666,8 @@ bd_getbigeom(int bunit)
 	return 0x4f010f;
     return ((v86.ecx & 0xc0) << 18) | ((v86.ecx & 0xff00) << 8) |
 	   (v86.edx & 0xff00) | (v86.ecx & 0x3f);
+#endif
+    return (0x4f010f);
 }
 
 /*

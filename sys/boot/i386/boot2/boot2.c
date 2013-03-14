@@ -24,6 +24,7 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/bootinfo.h>
 #include <machine/elf.h>
+#include <machine/cpufunc.h>
 
 #include <stdarg.h>
 
@@ -133,7 +134,7 @@ static const char *kname;
 static uint32_t opts;
 static int comspeed = SIOSPD;
 static struct bootinfo bootinfo;
-static uint8_t ioctrl = IO_KEYBOARD;
+static uint8_t ioctrl = IO_SERIAL;
 
 void exit(int);
 static void load(void);
@@ -225,8 +226,10 @@ main(void)
     size_t nbyte;
 
     dmadat = (void *)(roundup2(__base + (int32_t)&_end, 0x10000) - __base);
+#if 0
     v86.ctl = V86_FLAGS;
-    v86.efl = PSL_RESERVED_DEFAULT | PSL_I;
+    v86.efl = PSL_RESERVED_DEFAULT | PSL_I | PSL_T;
+#endif
     dsk.drive = *(uint8_t *)PTOV(ARGS);
     dsk.type = dsk.drive & DRV_HARD ? TYPE_AD : TYPE_FD;
     dsk.unit = dsk.drive & DRV_MASK;
@@ -259,13 +262,16 @@ main(void)
      * or in case of failure, try to load a kernel directly instead.
      */
 
+#if 0
     if (!kname) {
 	kname = PATH_BOOT3;
-	if (autoboot && !keyhit(3*SECOND)) {
+	if (autoboot /*&& !keyhit(3*SECOND) */) {
 	    load();
 	    kname = PATH_KERNEL;
 	}
     }
+#endif
+    kname = PATH_BOOT3;
 
     /* Present the user with the boot2 prompt. */
 
@@ -276,11 +282,13 @@ main(void)
 		   "boot: ",
 		   dsk.drive & DRV_MASK, dev_nm[dsk.type], dsk.unit,
 		   'a' + dsk.part, kname);
+#if 0
 	if (ioctrl & IO_SERIAL)
 	    sio_flush();
 	if (!autoboot || keyhit(3*SECOND))
 	    getstr();
 	else if (!autoboot || !OPT_CHECK(RBX_QUIET))
+#endif
 	    putchar('\n');
 	autoboot = 0;
 	if (parse())
@@ -581,9 +589,17 @@ putchar(int c)
     xputc(c);
 }
 
+#define BIOSEMUL_DISK_LBA	0x300
+#define BIOSEMUL_DISK_COUNT	0x301
+#define BIOSEMUL_DISK_ADDR	0x302
+#define BIOSEMUL_DISK_COMMAND 	0x303
+#define BIOSEMUL_DISK_COMMAND_READ 0
+#define BIOSEMUL_DISK_COMMAND_WRITE 1
+
 static int
 drvread(void *buf, unsigned lba, unsigned nblk)
 {
+#if 0
     static unsigned c = 0x2d5c7c2f;
 
     if (!OPT_CHECK(RBX_QUIET))
@@ -601,6 +617,12 @@ drvread(void *buf, unsigned lba, unsigned nblk)
 	printf("error %u lba %u\n", v86.eax >> 8 & 0xff, lba);
 	return -1;
     }
+#endif
+	outl(BIOSEMUL_DISK_LBA, lba);
+	outl(BIOSEMUL_DISK_COUNT, nblk);
+	outl(BIOSEMUL_DISK_ADDR, VTOP(buf));
+	outl(BIOSEMUL_DISK_COMMAND, BIOSEMUL_DISK_COMMAND_READ);
+
     return 0;
 }
 

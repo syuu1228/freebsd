@@ -50,6 +50,7 @@ bios_getmem(void)
 {
     uint64_t size;
 
+#if 0
     /* Parse system memory map */
     v86.ebx = 0;
     do {
@@ -119,6 +120,9 @@ bios_getmem(void)
 	v86int();
 	bios_extmem = (v86.eax & 0xffff) * 1024;
     }
+#endif
+    bios_basemem = 640 * 1024;
+    bios_extmem = 100 * 1024 * 1024;
 
     /* Set memtop to actual top of memory */
     memtop = memtop_copyin = 0x100000 + bios_extmem;

@@ -54,6 +54,10 @@ sio_flush.2:	ret				# To caller
 
 /* void sio_putc(int c) */
 
+sio_putc:	movw $SIO_PRT, %dx
+		outb %al,(%dx)
+		ret
+/*
 sio_putc:	pushl %eax
 		movw $SIO_PRT+0x5,%dx		# Line status reg
 		xor %ecx,%ecx			# Timeout
@@ -66,6 +70,7 @@ sio_putc.1:	inb (%dx),%al			# Transmitter
 		subb $0x5,%dl			# Transmitter hold reg
 		outb %al,(%dx)			# Write character
 sio_putc.2:	ret				# To caller
+*/
 
 /* int sio_getc(void) */
 
