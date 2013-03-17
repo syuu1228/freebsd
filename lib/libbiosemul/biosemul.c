@@ -896,7 +896,6 @@ set_modified_regs(struct vmctx *ctx, int vcpu, regcontext_t *orig, regcontext_t 
 
 extern void int13(regcontext_t *REGS);
 
-#if 0
 void
 exc_dump(regcontext_t *REGS)
 {
@@ -935,13 +934,18 @@ exc_dump(regcontext_t *REGS)
 	ud_set_input_buffer(&ud_obj, lomem_addr + eip + eip_off, 16);
 	ud_disassemble(&ud_obj);
 
+	fprintf(tracef, "32bit-%s exception:%d error_code:%x eip:%x cs:%x eflags:%x ss:%x esp:%x", 
+		cs & 0x3 ? "user" : "kern", exception, error_code, eip, cs, eflags, ss, old_esp);
+	fprintf(tracef, " insn:%s", ud_insn_asm(&ud_obj));
+	fprintf(tracef, " ds:%x cr0:%x eax:%x ebx:%x ecx:%x edx:%x\n",
+			R_DS, R_CR0, R_EAX, R_EBX, R_ECX, R_EDX);
 	fprintf(stderr, "32bit-%s exception:%d error_code:%x eip:%x cs:%x eflags:%x ss:%x esp:%x", 
 		cs & 0x3 ? "user" : "kern", exception, error_code, eip, cs, eflags, ss, old_esp);
 	fprintf(stderr, " insn:%s", ud_insn_asm(&ud_obj));
 	fprintf(stderr, " ds:%x cr0:%x eax:%x ebx:%x ecx:%x edx:%x\n",
 			R_DS, R_CR0, R_EAX, R_EBX, R_ECX, R_EDX);
+
 }
-#endif
 
 void
 vmcall_dump(regcontext_t *REGS)
@@ -979,32 +983,34 @@ biosemul_call(struct vmctx *ctx, struct vm_exit *vmexit __unused, int vcpu)
 	modified = orig;
 	if (R_CR0 & CR0_PE) {
 		switch (R_EIP) {
-		case 0x918f: /* ex_db */
+#if 0
+		case 0x9198: /* ex_db */
 			fprintf(tracef, "[trace] ");
 			int01(&modified);
 			break;
-#if 0
-		case 0x9193: /* ex_noc */
+		case 0x919c: /* ex_noc */
 			fprintf(tracef, "[ex_noc] ");
+			fprintf(stderr, "[ex_noc] ");
 			exc_dump(&modified);
 			break;
-		case 0x919e: /* except */
+#endif
+		case 0x918f: /* except */
 			fprintf(tracef, "[except] ");
+			fprintf(stderr, "[except] ");
 			exc_dump(&modified);
 			break;
-		case 0x924e: /* intx31 */
+		case 0x9257: /* intx31 */
 			fprintf(tracef, "[intx31] ");
 			vmcall_dump(&modified);
 			break;
-		case 0x93f3:
-			fprintf(tracef, "[intx30] ");
-			vmcall_dump(&modified);
-			break;
-		case 0x9253: /* int_hw */
+		case 0x925c: /* int_hw */
 			fprintf(tracef, "[int_hw] ");
 			vmcall_dump(&modified);
 			break;
-#endif
+		case 0x9402: /* intx30 */
+			fprintf(tracef, "[intx30] ");
+			vmcall_dump(&modified);
+			break;
 		default:
 			fprintf(tracef, "[default] ");
 			vmcall_dump(&modified);
@@ -1020,12 +1026,16 @@ biosemul_call(struct vmctx *ctx, struct vm_exit *vmexit __unused, int vcpu)
 		callback_t func = find_callback(MAKEVEC(R_CS, R_IP));
 		if (func)
 			func(&modified);
-		fprintf(tracef, "[bioscall] ");
-		int01(&modified);
-		R_EFLAGS |= 0x100;
+		if (trace_mode) {
+			fprintf(tracef, "[bioscall] ");
+			int01(&modified);
+			fprintf(tracef, "EFLAGS:%x\n", R_EFLAGS);
+			R_EFLAGS |= 0x100;
+		}
 	}
 	set_modified_regs(ctx, vcpu, &orig, &modified);
-	fflush(tracef);
+	if (trace_mode)
+		fflush(tracef);
 
 	return (ret);
 }

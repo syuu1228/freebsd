@@ -191,12 +191,21 @@ init.4: 	movb $_ESP0H,TSS_ESP0+1(%di)	# Set ESP0
 		callw setpic			#  IRQ offsets
 		lidt idtdesc	 		# Set IDT
 		lgdt gdtdesc	 		# Set GDT
+
 		mov %cr0,%eax			# Switch to protected
 		inc %ax				#  mode
 		mov %eax,%cr0			#
 		ljmp $SEL_SCODE,$init.8		# To 32-bit code
 		.code32
-init.8: 	xorl %ecx,%ecx			# Zero
+init.8: 	
+/*
+		pushfl
+		popl %eax
+		orl $0x100, %eax
+		pushl %eax
+		popfl
+*/
+		xorl %ecx,%ecx			# Zero
 		movb $SEL_SDATA,%cl		# To 32-bit
 		movw %cx,%ss			#  stack
 /*
@@ -340,18 +349,20 @@ intx00: 	push $0x0			# Int 0x0: #DE
 intx10: 	push $0x10			# Int 0x10: #MF
 		jmp ex_noc			# Floating-point error
 
-ex_db:		vmcall
+ex_db:		/* vmcall */
 		iret
 
 /*
  * Save a zero error code.
  */
-ex_noc: 	pushl (%esp,1)			# Duplicate int no
+ex_noc: 	/*vmcall*/
+		pushl (%esp,1)			# Duplicate int no
 		movb $0x0,0x4(%esp,1)		# Fake error code
 /*
  * Handle exception.
  */
-except: 	cld				# String ops inc
+except: 	vmcall
+		cld				# String ops inc
 		pushl %ds			# Save
 		pushl %es			#  most
 		pusha				#  registers
@@ -435,7 +446,8 @@ intx20: 	push $0x8			# Int 0x20: IRQ0
 /*
  * Invoke real mode interrupt/function call from user mode with arguments.
  */
-intx31: 	pushl $-1			# Dummy int no for btx_v86
+intx31: 	/*vmcall*/
+		pushl $-1			# Dummy int no for btx_v86
 /*
  * Invoke real mode interrupt/function call from protected mode.
  *
@@ -476,7 +488,8 @@ intx31: 	pushl $-1			# Dummy int no for btx_v86
  * -0x70 zero %ds (hardware int only)
  * -0x74 zero %es (hardware int only)
  */
-int_hw: 	cld				# String ops inc
+int_hw: 	/*vmcall*/
+		cld				# String ops inc
 		pusha				# Save gp regs
 		pushl %gs			# Save
 		pushl %fs			#  seg
@@ -571,13 +584,11 @@ intusr.6:	movl -0x08(%esi),%ebx		# Copy user flags to real
 		movl %ebx,MEM_ESPR-0x10		#  CS:IP
 		movl %eax,MEM_ESPR-0x16		# Real mode target CS:IP
 
-		/*
 		pushfl				# disable tracing
 		popl %eax
 		andl $~0x100, %eax
 		pushl %eax
 		popfl
-		*/
 
 		ljmpw $SEL_RCODE,$intusr.7	# Change to 16-bit segment
 		.code16
@@ -713,7 +724,8 @@ rret_tramp.3:	popl %es			# Restore
 /*
  * System Call.
  */
-intx30:		cmpl $SYS_EXEC,%eax		# Exec system call?
+intx30:		/*vmcall*/
+		cmpl $SYS_EXEC,%eax		# Exec system call?
 		jne intx30.1			# No
 		pushl %ss			# Set up
 		popl %es			#  all
