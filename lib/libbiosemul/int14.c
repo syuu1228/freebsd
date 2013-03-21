@@ -85,8 +85,10 @@ struct com_data_struct {
 
 struct com_data_struct com_data[N_COMS_MAX];
 
+/*
 static unsigned char	com_port_in(int port);
 static void		com_port_out(int port, unsigned char val);
+*/
 static void		com_set_line(struct com_data_struct *cdsp,
 				     unsigned char port, unsigned char param);
 static struct termios tio_new;
@@ -539,7 +541,7 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
 #if 0
     int mode = 0;		/* read | write */
 #endif
-    int reg_num, ret_val, spd, speed;
+    int /*reg_num,*/ ret_val, spd, speed;
     u_int8_t div_hi, div_lo;
     
     debug(D_PORT, "com_set_line: cdsp = %8p, port = 0x%04x,"
@@ -685,10 +687,12 @@ com_set_line(struct com_data_struct *cdsp, unsigned char port, unsigned char par
     debug(D_PORT, "ioctl of 0x%02lx to fd %d on 0x%X returned %d errno %d\n",
 	TIOCFLUSH, cdsp->fd, mode, ret_val, errno);
 #endif
+    /*
     for (reg_num = 0; reg_num < N_OF_COM_REGS; reg_num++) {
 	define_input_port_handler(cdsp->addr + reg_num, 1, com_port_in);
 	define_output_port_handler(cdsp->addr + reg_num, 1, com_port_out);
     }
+    */
     debug(D_PORT, "com%d: attached '%s' at addr 0x%04x irq %d\n",
 	port, NULL, cdsp->addr, cdsp->irq);
 
@@ -760,6 +764,7 @@ init_com(int port, char *path, int addr, unsigned char irq)
 }
 
 /* called when DOS wants to read directly from a physical port */
+#if 0
 unsigned char
 com_port_in(int port)
 {
@@ -929,3 +934,4 @@ com_port_out(int port, unsigned char val)
 	break;
     }
 }
+#endif
