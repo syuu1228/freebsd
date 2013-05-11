@@ -75,33 +75,6 @@ __FBSDID("$FreeBSD$");
 #include <netinet6/ip6_var.h>
 #endif /* INET6 */
 
-/*-
- * Operating system parts of receiver-side steering (RSS), which allows
- * network cards to direct flows to particular receive queues based on hashes
- * if header tuples.  This implementation aligns RSS buckets with connection
- * groups at the TCP/IP layer, so each bucket is associated with exactly one
- * group.  As a result, the group lookup structures (and lock) should have an
- * effective affinity with exactly one CPU.
- *
- * Network device drivers needing to configure RSS will query this framework
- * for parameters, such as the current RSS key, hashing policies, number of
- * bits, and indirection table mapping hashes to buckets and CPUs.  They may
- * provide their own supplementary information, such as queue<->CPU bindings.
- * It is the responsibility of the network device driver to inject packets
- * into the stack on as close to the right CPU as possible, if playing by RSS
- * rules.
- *
- * TODO:
- *
- * - Synchronization for rss_key and other future-configurable parameters.
- * - Event handler drivers can register to pick up RSS configuration changes.
- * - Should we allow rss_basecpu to be configured?
- * - Randomize key on boot.
- * - IPv6 support.
- * - Statistics on how often there's a misalignment between hardware
- *   placement and pcbgroup expectations.
- */
-
 SYSCTL_NODE(_net_inet, OID_AUTO, softrss, CTLFLAG_RW, 0, "Software Receive-side steering");
 
 /*
@@ -453,6 +426,7 @@ rss_m2cpuid(struct mbuf *m, uintptr_t source, u_int *cpuid)
 		*cpuid = rss_getcpu(rss_getbucket(m->m_pkthdr.flowid));
 		return (m);
 	}
+#ifdef INET6
 	if (ether_type == ETHERTYPE_IPV6) {
 		struct ip6_hdr *ip6 = (struct ip6_hdr *)(eh + 1);
 
@@ -465,6 +439,7 @@ rss_m2cpuid(struct mbuf *m, uintptr_t source, u_int *cpuid)
 		*cpuid = rss_getcpu(rss_getbucket(m->m_pkthdr.flowid));
 		return (m);
 	}
+#endif
 failed:
 	*cpuid = NETISR_CPUID_NONE;
 	return (m);
@@ -518,7 +493,6 @@ rss_getnumcpus(void)
 	return (rss_ncpus);
 }
 
-#if 0
 /*
  * XXXRW: Confirm that sysctl -a won't dump this keying material, don't want
  * it appearing in debugging output unnecessarily.
@@ -547,4 +521,3 @@ sysctl_rss_key(SYSCTL_HANDLER_ARGS)
 SYSCTL_PROC(_net_inet_softrss, OID_AUTO, key,
     CTLTYPE_OPAQUE | CTLFLAG_RD | CTLFLAG_MPSAFE, NULL, 0, sysctl_rss_key,
     "", "RSS keying material");
-#endif
