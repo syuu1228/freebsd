@@ -57,11 +57,13 @@ __FBSDID("$FreeBSD$");
 #include <net/netisr.h>
 #include <net/route.h>
 #include <net/vnet.h>
+#include <net/ethernet.h>
 
 #include <netinet/in.h>
 #include <netinet/in_pcb.h>
 #include <netinet/in_softrss.h>
 #include <netinet/in_var.h>
+#include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/tcp_var.h>
 #include <netinet/toeplitz.h>
@@ -428,19 +430,44 @@ rss_getcpu(u_int bucket)
 struct mbuf *
 rss_m2cpuid(struct mbuf *m, uintptr_t source, u_int *cpuid)
 {
+	struct ether_header *eh;
+	u_short ether_type;
 
 	M_ASSERTPKTHDR(m);
 
-	switch (M_HASHTYPE_GET(m)) {
-	case M_HASHTYPE_RSS_2TUPLE:
-	case M_HASHTYPE_RSS_4TUPLE:
+	if (m->m_flags & M_FLOWID)
+		goto failed;
+
+	eh = mtod(m, struct ether_header *);
+	ether_type = ntohs(eh->ether_type);
+
+	if (ether_type == ETHERTYPE_IP) {
+		struct ip *ip = (struct ip *)(eh + 1);
+
+		if (ip->ip_p == IPPROTO_TCP || ip->ip_p == IPPROTO_UDP) {
+			struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+			m->m_pkthdr.flowid = rss_hash_ip4_4tuple(ip->ip_src, uh->uh_sport, ip->ip_dst, uh->uh_dport);
+		} else
+			m->m_pkthdr.flowid = rss_hash_ip4_2tuple(ip->ip_src, ip->ip_dst);
+		m->m_flags |= M_FLOWID;
 		*cpuid = rss_getcpu(rss_getbucket(m->m_pkthdr.flowid));
 		return (m);
+	}
+	if (ether_type == ETHERTYPE_IPV6) {
+		struct ip6_hdr *ip6 = (struct ip6_hdr *)(eh + 1);
 
-	default:
-		*cpuid = NETISR_CPUID_NONE;
+		if (ip6->ip6_nxt == IPPROTO_TCP || ip6->ip6_nxt == IPPROTO_UDP) {
+			struct udphdr *uh = (struct udphdr *)(ip6 + 1);
+			m->m_pkthdr.flowid = rss_hash_ip6_4tuple(ip6->ip6_src, uh->uh_sport, ip6->ip6_dst, uh->uh_dport);
+		} else
+			m->m_pkthdr.flowid = rss_hash_ip6_2tuple(ip6->ip6_src, ip6->ip6_dst);
+		m->m_flags |= M_FLOWID;
+		*cpuid = rss_getcpu(rss_getbucket(m->m_pkthdr.flowid));
 		return (m);
 	}
+failed:
+	*cpuid = NETISR_CPUID_NONE;
+	return (m);
 }
 
 /*
@@ -491,6 +518,7 @@ rss_getnumcpus(void)
 	return (rss_ncpus);
 }
 
+#if 0
 /*
  * XXXRW: Confirm that sysctl -a won't dump this keying material, don't want
  * it appearing in debugging output unnecessarily.
@@ -516,6 +544,7 @@ sysctl_rss_key(SYSCTL_HANDLER_ARGS)
 	}
 	return (0);
 }
-SYSCTL_PROC(_net_inet_rss, OID_AUTO, key,
+SYSCTL_PROC(_net_inet_softrss, OID_AUTO, key,
     CTLTYPE_OPAQUE | CTLFLAG_RD | CTLFLAG_MPSAFE, NULL, 0, sysctl_rss_key,
     "", "RSS keying material");
+#endif
