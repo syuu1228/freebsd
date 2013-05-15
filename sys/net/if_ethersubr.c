@@ -669,7 +669,7 @@ static struct netisr_handler	ether_nh = {
 	.nh_proto = NETISR_ETHER,
 #ifdef SOFTRSS
 	.nh_policy = NETISR_POLICY_CPU,
-	.nh_dispatch = NETISR_DISPATCH_DIRECT,
+	.nh_dispatch = NETISR_DISPATCH_HYBRID,
 	.nh_m2cpuid = rss_m2cpuid,
 #else
 	.nh_policy = NETISR_POLICY_SOURCE,

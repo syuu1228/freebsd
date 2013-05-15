@@ -75,7 +75,7 @@ __FBSDID("$FreeBSD$");
 #include <netinet6/ip6_var.h>
 #endif /* INET6 */
 
-SYSCTL_NODE(_net_inet, OID_AUTO, softrss, CTLFLAG_RW, 0, "Software Receive-side steering");
+SYSCTL_NODE(_net_inet, OID_AUTO, softrss, CTLFLAG_RW, 0, "Software receive-side steering");
 
 /*
  * Toeplitz is the only required hash function in the RSS spec, so use it by
@@ -83,7 +83,7 @@ SYSCTL_NODE(_net_inet, OID_AUTO, softrss, CTLFLAG_RW, 0, "Software Receive-side 
  */
 static u_int	rss_hashalgo = RSS_HASH_TOEPLITZ;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, hashalgo, CTLFLAG_RD, &rss_hashalgo, 0,
-    "RSS hash algorithm");
+    "SoftRSS hash algorithm");
 TUNABLE_INT("net.inet.softrss.hashalgo", &rss_hashalgo);
 
 /*
@@ -96,16 +96,16 @@ TUNABLE_INT("net.inet.softrss.hashalgo", &rss_hashalgo);
  */
 static u_int	rss_bits;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, bits, CTLFLAG_RD, &rss_bits, 0,
-    "RSS bits");
+    "SoftRSS bits");
 TUNABLE_INT("net.inet.softrss.bits", &rss_bits);
 
 static u_int	rss_mask;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, mask, CTLFLAG_RD, &rss_mask, 0,
-    "RSS mask");
+    "SoftRSS mask");
 
 static const u_int	rss_maxbits = RSS_MAXBITS;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, maxbits, CTLFLAG_RD,
-    __DECONST(int *, &rss_maxbits), 0, "RSS maximum bits");
+    __DECONST(int *, &rss_maxbits), 0, "SoftRSS maximum bits");
 
 /*
  * RSS's own count of the number of CPUs it could be using for processing.
@@ -113,19 +113,19 @@ SYSCTL_INT(_net_inet_softrss, OID_AUTO, maxbits, CTLFLAG_RD,
  */
 static u_int	rss_ncpus;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, ncpus, CTLFLAG_RD, &rss_ncpus, 0,
-    "Number of CPUs available to RSS");
+    "Number of CPUs available to SoftRSS");
 
 #define	RSS_MAXCPUS	(1 << (RSS_MAXBITS - 1))
 static const u_int	rss_maxcpus = RSS_MAXCPUS;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, maxcpus, CTLFLAG_RD,
-    __DECONST(int *, &rss_maxcpus), 0, "RSS maximum CPUs that can be used");
+    __DECONST(int *, &rss_maxcpus), 0, "SoftRSS maximum CPUs that can be used");
 
 /*
  * Variable exists just for reporting rss_bits in a user-friendly way.
  */
 static u_int	rss_buckets;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, buckets, CTLFLAG_RD, &rss_buckets, 0,
-    "RSS buckets");
+    "SoftRSS buckets");
 
 /*
  * Base CPU number; devices will add this to all CPU numbers returned by the
@@ -133,7 +133,7 @@ SYSCTL_INT(_net_inet_softrss, OID_AUTO, buckets, CTLFLAG_RD, &rss_buckets, 0,
  */
 static const u_int	rss_basecpu;
 SYSCTL_INT(_net_inet_softrss, OID_AUTO, basecpu, CTLFLAG_RD,
-    __DECONST(int *, &rss_basecpu), 0, "RSS base CPU");
+    __DECONST(int *, &rss_basecpu), 0, "SoftRSS base CPU");
 
 /*
  * RSS secret key, intended to prevent attacks on load-balancing.  Its
@@ -416,27 +416,28 @@ rss_m2cpuid(struct mbuf *m, uintptr_t source, u_int *cpuid)
 
 	if (ether_type == ETHERTYPE_IP) {
 		struct ip *ip = (struct ip *)(eh + 1);
+		uint32_t flowid;
 
 		if (ip->ip_p == IPPROTO_TCP || ip->ip_p == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
-			m->m_pkthdr.flowid = rss_hash_ip4_4tuple(ip->ip_src, uh->uh_sport, ip->ip_dst, uh->uh_dport);
+			flowid = rss_hash_ip4_4tuple(ip->ip_src, uh->uh_sport, ip->ip_dst, uh->uh_dport);
 		} else
-			m->m_pkthdr.flowid = rss_hash_ip4_2tuple(ip->ip_src, ip->ip_dst);
-		m->m_flags |= M_FLOWID;
-		*cpuid = rss_getcpu(rss_getbucket(m->m_pkthdr.flowid));
+			flowid = rss_hash_ip4_2tuple(ip->ip_src, ip->ip_dst);
+		*cpuid = rss_getcpu(rss_getbucket(flowid));
 		return (m);
 	}
 #ifdef INET6
 	if (ether_type == ETHERTYPE_IPV6) {
 		struct ip6_hdr *ip6 = (struct ip6_hdr *)(eh + 1);
+		uint32_t flowid;
 
 		if (ip6->ip6_nxt == IPPROTO_TCP || ip6->ip6_nxt == IPPROTO_UDP) {
 			struct udphdr *uh = (struct udphdr *)(ip6 + 1);
-			m->m_pkthdr.flowid = rss_hash_ip6_4tuple(ip6->ip6_src, uh->uh_sport, ip6->ip6_dst, uh->uh_dport);
+			flowid = rss_hash_ip6_4tuple(ip6->ip6_src, uh->uh_sport, ip6->ip6_dst, uh->uh_dport);
 		} else
-			m->m_pkthdr.flowid = rss_hash_ip6_2tuple(ip6->ip6_src, ip6->ip6_dst);
+			flowid = rss_hash_ip6_2tuple(ip6->ip6_src, ip6->ip6_dst);
 		m->m_flags |= M_FLOWID;
-		*cpuid = rss_getcpu(rss_getbucket(m->m_pkthdr.flowid));
+		*cpuid = rss_getcpu(rss_getbucket(flowid));
 		return (m);
 	}
 #endif
