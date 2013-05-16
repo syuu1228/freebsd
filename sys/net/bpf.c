@@ -2513,7 +2513,7 @@ bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
  				}
  			}
  		}
- 		BPFQ_RUNLOCK(&d->bd_qmask, &qm_tracker);
+ 		BPFQ_RUNLOCK(&d->bd_qmask);
  
 		if (BPF_CHECK_DIRECTION(d, m->m_pkthdr.rcvif, bp->bif_ifp))
 			continue;
