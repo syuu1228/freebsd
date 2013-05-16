@@ -823,7 +823,7 @@ bpfopen(struct cdev *dev, int flags, int fmt, struct thread *td)
  	d->bd_qmask.qm_rxq_mask = NULL;
  	d->bd_qmask.qm_txq_mask = NULL;
  	d->bd_qmask.qm_other_mask = FALSE;
- 	rw_init(&d->bd_qmask, "qmask lock");
+ 	rw_init(&d->bd_qmask.qm_lock, "qmask lock");
 
 	return (0);
 }
