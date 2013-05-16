@@ -5710,32 +5710,6 @@ igb_add_hw_stats(struct adapter *adapter)
 			"XON Received");
 	SYSCTL_ADD_QUAD(ctx, stat_list, OID_AUTO, "xon_txd",
 			CTLFLAG_RD, &stats->xontxc,
-
-static int
-igb_get_rxqueue_len(struct ifnet *ifp)
-{
-	struct adapter	*adapter = ifp->if_softc;
-	return (adapter->num_queues);
-}
-
-static int
-igb_get_txqueue_len(struct ifnet *ifp)
-{
-	struct adapter	*adapter = ifp->if_softc;
-	return (adapter->num_queues);
-}
-
-static int
-igb_get_rxqueue_affinity(struct ifnet *ifp, int queid)
-{
-	return (queid);
-}
-
-static int
-igb_get_txqueue_affinity(struct ifnet *ifp, int queid)
-{
-	return (queid);
-}
 			"XON Transmitted");
 	SYSCTL_ADD_QUAD(ctx, stat_list, OID_AUTO, "xoff_recvd",
 			CTLFLAG_RD, &stats->xoffrxc,
@@ -6090,4 +6064,30 @@ igb_sysctl_eee(SYSCTL_HANDLER_ARGS)
 	igb_init_locked(adapter);
 	IGB_CORE_UNLOCK(adapter);
 	return (0);
+}
+
+static int
+igb_get_rxqueue_len(struct ifnet *ifp)
+{
+	struct adapter	*adapter = ifp->if_softc;
+	return (adapter->num_queues);
+}
+
+static int
+igb_get_txqueue_len(struct ifnet *ifp)
+{
+	struct adapter	*adapter = ifp->if_softc;
+	return (adapter->num_queues);
+}
+
+static int
+igb_get_rxqueue_affinity(struct ifnet *ifp, int queid)
+{
+	return (queid);
+}
+
+static int
+igb_get_txqueue_affinity(struct ifnet *ifp, int queid)
+{
+	return (queid);
 }
