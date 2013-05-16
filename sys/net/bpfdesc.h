@@ -50,7 +50,7 @@ struct bpf_qmask {
 	boolean_t *	qm_rxq_mask;
 	boolean_t *	qm_txq_mask;
 	boolean_t	qm_other_mask;
-	struct rmlock	qm_lock;
+	struct rwlock	qm_lock;
 };
 
 #define BPFQ_LOCK_DESTROY(qm)		rw_destroy(&(qm)->qm_lock)

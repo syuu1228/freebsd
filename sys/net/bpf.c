@@ -819,6 +819,12 @@ bpfopen(struct cdev *dev, int flags, int fmt, struct thread *td)
 	size = d->bd_bufsize;
 	bpf_buffer_ioctl_sblen(d, &size);
 
+ 	d->bd_qmask.qm_enabled = FALSE;
+ 	d->bd_qmask.qm_rxq_mask = NULL;
+ 	d->bd_qmask.qm_txq_mask = NULL;
+ 	d->bd_qmask.qm_other_mask = FALSE;
+ 	rw_init(&d->bd_qmask, "qmask lock");
+
 	return (0);
 }
 
@@ -3088,11 +3094,6 @@ bpfstats_fill_xbpf(struct xbpf_d *d, struct bpf_d *bd)
 	d->bd_wfcount = bd->bd_wfcount;
 	d->bd_zcopy = bd->bd_zcopy;
 	d->bd_bufmode = bd->bd_bufmode;
- 	d->bd_qmask.qm_enabled = FALSE;
- 	d->bd_qmask.qm_rxq_mask = NULL;
- 	d->bd_qmask.qm_txq_mask = NULL;
- 	d->bd_qmask.qm_other_mask = FALSE;
- 	rw_init(&d->bd_qmask, "qmask lock");
 }
 
 /*
