@@ -999,6 +999,8 @@ status(const struct afswtch *afp, const struct sockaddr_dl *sdl,
 			if (ioctl(s, SIOCGIFRXQAFFINITY, &ifr) == 0)
 				printf(" %d:%d", ifr.ifr_queue_affinity_index,
 					ifr.ifr_queue_affinity_cpu);
+			else
+				perror("ioctl");
 		}
 		printf(" ]\n");
 
@@ -1008,6 +1010,8 @@ status(const struct afswtch *afp, const struct sockaddr_dl *sdl,
 			if (ioctl(s, SIOCGIFTXQAFFINITY, &ifr) == 0)
 				printf(" %d:%d", ifr.ifr_queue_affinity_index,
 					ifr.ifr_queue_affinity_cpu);
+			else
+				perror("ioctl");
 		}
 		printf(" ]\n");
 	}
