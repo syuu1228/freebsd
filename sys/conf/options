@@ -423,6 +423,7 @@ PF_DEFAULT_TO_DROP	opt_pf.h
 RADIX_MPATH		opt_mpath.h
 ROUTETABLES		opt_route.h
 SOFTRSS			opt_softrss.h
+RFS			opt_rfs.h
 SLIP_IFF_OPTS		opt_slip.h
 TCPDEBUG
 TCP_OFFLOAD		opt_inet.h # Enable code to dispatch TCP offloading

@@ -3128,6 +3128,7 @@ netinet/in_pcbgroup.c		optional inet pcbgroup | inet6 pcbgroup
 netinet/in_proto.c		optional inet | inet6
 netinet/in_rmx.c		optional inet
 netinet/in_softrss.c		optional inet softrss
+netinet/in_rfs.c		optional inet rfs
 netinet/ip_divert.c		optional inet ipdivert ipfirewall
 netinet/ip_ecn.c		optional inet | inet6
 netinet/ip_encap.c		optional inet | inet6

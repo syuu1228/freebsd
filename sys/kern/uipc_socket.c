@@ -107,6 +107,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet6.h"
 #include "opt_zero.h"
 #include "opt_compat.h"
+#include "opt_rfs.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -148,6 +149,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/mount.h>
 #include <sys/sysent.h>
 #include <compat/freebsd32/freebsd32.h>
+#endif
+
+#ifdef RFS
+#include <netinet/in_rfs.h>
 #endif
 
 static int	soreceive_rcvoob(struct socket *so, struct uio *uio,
@@ -2406,6 +2411,9 @@ soreceive(struct socket *so, struct sockaddr **psa, struct uio *uio,
 {
 	int error;
 
+#ifdef RFS
+	rfs_record_curcpu(&so->so_rcv);
+#endif
 	CURVNET_SET(so->so_vnet);
 	error = (so->so_proto->pr_usrreqs->pru_soreceive(so, psa, uio, mp0,
 	    controlp, flagsp));

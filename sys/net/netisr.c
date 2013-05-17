@@ -65,6 +65,7 @@ __FBSDID("$FreeBSD$");
 
 #include "opt_ddb.h"
 #include "opt_device_polling.h"
+#include "opt_rfs.h"
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -93,6 +94,10 @@ __FBSDID("$FreeBSD$");
 #include <net/netisr.h>
 #include <net/netisr_internal.h>
 #include <net/vnet.h>
+
+#ifdef RFS
+#include <netinet/in_rfs.h>
+#endif
 
 /*-
  * Synchronize use and modification of the registered netisr data structures;
@@ -803,6 +808,12 @@ netisr_process_workstream_proto(struct netisr_workstream *nwsp, u_int proto)
 		VNET_ASSERT(m->m_pkthdr.rcvif != NULL,
 		    ("%s:%d rcvif == NULL: m=%p", __func__, __LINE__, m));
 		CURVNET_SET(m->m_pkthdr.rcvif->if_vnet);
+#ifdef RFS
+		if (m->m_pkthdr.flowid) {
+			printf("[%d]%s flowid:%x proto:%d\n", curcpu, __func__, m->m_pkghdr.flowid, proto);
+			rfs_dec_flow_qlen(m->m_pkthdr.flowid);
+		}
+#endif
 		netisr_proto[proto].np_handler(m);
 		CURVNET_RESTORE();
 	}
@@ -1061,6 +1072,12 @@ netisr_dispatch_src(u_int proto, uintptr_t source, struct mbuf *m)
 	 */
 	nwsp->nws_flags |= NWS_DISPATCHING;
 	NWS_UNLOCK(nwsp);
+#ifdef RFS
+	if (m->m_pkthdr.flowid) {
+		printf("[%d]%s flowid:%x proto:%d\n", curcpu, __func__, m->m_pkghdr.flowid, proto);
+		rfs_dec_flow_qlen(m->m_pkthdr.flowid);
+	}
+#endif 	
 	netisr_proto[proto].np_handler(m);
 	NWS_LOCK(nwsp);
 	nwsp->nws_flags &= ~NWS_DISPATCHING;
@@ -1193,7 +1210,10 @@ netisr_init(void *arg)
 		netisr_bindthreads = 0;
 	}
 #endif
-
+#if defined(SOFTRSS) || defined(RFS)
+	netisr_maxthreads = mp_ncpus;
+	netisr_bindthreads = 1;
+#endif
 	if (TUNABLE_STR_FETCH("net.isr.dispatch", tmp, sizeof(tmp))) {
 		error = netisr_dispatch_policy_from_str(tmp,
 		    &dispatch_policy);

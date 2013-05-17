@@ -37,6 +37,7 @@
 #include "opt_netgraph.h"
 #include "opt_mbuf_profiling.h"
 #include "opt_softrss.h"
+#include "opt_rps.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -667,7 +668,11 @@ static struct netisr_handler	ether_nh = {
 	.nh_name = "ether",
 	.nh_handler = ether_nh_input,
 	.nh_proto = NETISR_ETHER,
-#ifdef SOFTRSS
+#if defined(RFS)
+	.nh_policy = NETISR_POLICY_CPU,
+	.nh_dispatch = NETISR_DISPATCH_HYBRID,
+	.nh_m2cpuid = rfs_m2cpuid,
+#elif defined(SOFTRSS)
 	.nh_policy = NETISR_POLICY_CPU,
 	.nh_dispatch = NETISR_DISPATCH_HYBRID,
 	.nh_m2cpuid = rss_m2cpuid,
