@@ -55,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
 #include "opt_tcpdebug.h"
+#include "opt_rfs.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -938,6 +939,9 @@ findpcb:
 		rstreason = BANDLIM_RST_CLOSEDPORT;
 		goto dropwithreset;
 	}
+#ifdef RFS
+	inp->inp_socket->so_rcv.flowid = m->m_pkthdr.flowid;
+#endif
 	INP_WLOCK_ASSERT(inp);
 	if (!(inp->inp_flags & INP_HW_FLOWID)
 	    && (m->m_flags & M_FLOWID)

@@ -393,6 +393,8 @@ ETHER_II		opt_ef.h
 ETHER_SNAP		opt_ef.h
 INET			opt_inet.h
 INET6			opt_inet6.h
+RPS			opt_rps.h
+RFS			opt_rfs.h
 IPDIVERT
 IPFILTER		opt_ipfilter.h
 IPFILTER_DEFAULT_BLOCK	opt_ipfilter.h

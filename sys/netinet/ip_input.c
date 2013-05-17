@@ -37,6 +37,8 @@ __FBSDID("$FreeBSD$");
 #include "opt_ipstealth.h"
 #include "opt_ipsec.h"
 #include "opt_route.h"
+#include "opt_rps.h"
+#include "opt_rfs.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,7 +78,9 @@ __FBSDID("$FreeBSD$");
 #ifdef IPSEC
 #include <netinet/ip_ipsec.h>
 #endif /* IPSEC */
-
+#ifdef RFS
+#include <netinet/in_rfs.h>
+#endif
 #include <sys/socketvar.h>
 
 #include <security/mac/mac_framework.h>
@@ -144,6 +148,16 @@ static struct netisr_handler ip_nh = {
 	.nh_handler = ip_input,
 	.nh_proto = NETISR_IP,
 	.nh_policy = NETISR_POLICY_FLOW,
+#if defined RFS
+	.nh_policy = NETISR_POLICY_CPU,
+	.nh_dispatch = NETISR_DISPATCH_DEFERRED,
+	.nh_m2cpuid = rfs_m2cpuid,
+#elif defined RPS
+ 	.nh_policy = NETISR_POLICY_FLOW,
+ 	.nh_dispatch = NETISR_DISPATCH_HYBRID,
+#else
+	.nh_policy = NETISR_POLICY_FLOW,
+#endif
 };
 
 extern	struct domain inetdomain;

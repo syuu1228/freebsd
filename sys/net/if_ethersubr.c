@@ -36,6 +36,7 @@
 #include "opt_ipx.h"
 #include "opt_netgraph.h"
 #include "opt_mbuf_profiling.h"
+#include "opt_rps.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,6 +80,16 @@
 #ifdef IPX
 #include <netipx/ipx.h>
 #include <netipx/ipx_if.h>
+#endif
+
+
+#ifdef RPS
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+typedef uint32_t u32;
+typedef uint8_t u8;
+#include <ofed/include/linux/jhash.h>
 #endif
 
 int (*ef_inputp)(struct ifnet*, struct ether_header *eh, struct mbuf *m);
@@ -789,6 +800,40 @@ ether_demux(struct ifnet *ifp, struct mbuf *m)
 	case ETHERTYPE_IP:
 		if ((m = ip_fastforward(m)) == NULL)
 			return;
+#ifdef RPS
+		{
+			struct ip *ip = NULL;
+			struct tcphdr *th = NULL;
+			struct udphdr *uh = NULL;
+			union {
+			        uint32_t ports;
+			        uint16_t port[2];
+			} tp_ports;
+
+			if (m->m_flags & M_FLOWID)
+				goto not_rps;
+
+                        ip = mtod(m, struct ip *);
+                        switch (ip->ip_p){
+			case IPPROTO_TCP:
+				th = (struct tcphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+				tp_ports.port[0] = th->th_sport;
+				tp_ports.port[1] = th->th_dport;
+				break;
+			case IPPROTO_UDP:
+				uh = (struct udphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+				tp_ports.port[0] = uh->uh_sport;
+				tp_ports.port[0] = uh->uh_dport;
+				break;
+			default:
+				goto not_rps;
+			}
+			m->m_pkthdr.flowid = jhash_3words(ip->ip_src.s_addr,ip->ip_dst.s_addr,
+							  tp_ports.ports,3);
+			m->m_flags |= M_FLOWID;
+		}
+	not_rps:
+#endif
 		isr = NETISR_IP;
 		break;
 

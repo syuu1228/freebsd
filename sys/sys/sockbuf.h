@@ -32,6 +32,11 @@
  */
 #ifndef _SYS_SOCKBUF_H_
 #define _SYS_SOCKBUF_H_
+
+#ifdef HAVE_KERNEL_OPTION_HEADERS
+#include "opt_rfs.h"
+#endif
+
 #include <sys/selinfo.h>		/* for struct selinfo */
 #include <sys/_lock.h>
 #include <sys/_mutex.h>
@@ -101,6 +106,9 @@ struct	sockbuf {
 	short	sb_flags;	/* (c/d) flags, see below */
 	int	(*sb_upcall)(struct socket *, void *, int); /* (c/d) */
 	void	*sb_upcallarg;	/* (c/d) */
+#ifdef RFS
+	uint32_t flowid;
+#endif
 };
 
 #ifdef _KERNEL
