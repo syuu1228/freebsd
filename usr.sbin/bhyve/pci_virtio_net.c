@@ -48,6 +48,9 @@ __FBSDID("$FreeBSD$");
 #include <pthread.h>
 #include <pthread_np.h>
 
+#include <net/netmap.h>
+#include <net/netmap_user.h>
+
 #include "bhyverun.h"
 #include "pci_emul.h"
 #include "mevent.h"
@@ -667,6 +670,7 @@ pci_vtnet_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	 * Attempt to open the tap device
 	 */
 	sc->vsc_tapfd = -1;
+#if 0
 	if (opts != NULL) {
 		char tbuf[80];
 
@@ -699,6 +703,40 @@ pci_vtnet_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 			}
 		}		
 	}
+#else
+	{
+		struct nmreq req;
+		int l;
+		void *mem;
+		struct netmap_if *nifp;
+		struct netmap_ring *rx, *tx;
+
+		sc->vsc_tapfd = open("/dev/netmap", O_RDWR);
+		req.nr_ringid = 0;
+		req.nr_version = NETMAP_API;
+		err = ioctl(fd, NIOCGINFO, &req);
+		if (ioctl(sc->vsc_tapfd, NIOCGINFO, &req) < 0) {
+			WPRINTF(("netmap failed\n"));
+			close(sc->vsc_tapfd);
+			sc->vsc_tapfd = -1;
+		}
+		l = req.nr_memsize;
+		if (ioctl(sc->vsc_tapfd, NIOCREGIF, &req) < 0) {
+			WPRINTF(("netmap failed\n"));
+			close(sc->vsc_tapfd);
+			sc->vsc_tapfd = -1;
+		}
+		mem = mmap(0, l, PROT_WRITE | PROT_READ, MAP_SHARED, sc->vsc_tapfd, 0);
+		if (mem == MAP_FAILED) {
+			WPRINTF(("netmap failed\n"));
+			close(sc->vsc_tapfd);
+			sc->vsc_tapfd = -1;
+		}
+		nifp = NETMAP_IF(mem, req.nr_offset);
+		tx = NETMAP_TXRING(nifp, 0);
+		rx = NETMAP_RXRING(nifp, 0);
+	}
+#endif
 
 	/*
 	 * The MAC address is the standard NetApp OUI of 00-a0-98,
