@@ -224,6 +224,19 @@ static driver_t ixgbe_driver = {
 	"ix", ixgbe_methods, sizeof(struct adapter),
 };
 
+static d_ioctl_t ixgbe_extension_ioctl;
+static d_open_t ixgbe_extension_open;
+static d_close_t ixgbe_extension_close;
+
+static struct cdevsw ixgbe_cdevsw = {
+       .d_version =    D_VERSION,
+       .d_flags =      0,
+       .d_open =       ixgbe_extension_open,
+       .d_close =      ixgbe_extension_close,
+       .d_ioctl =      ixgbe_extension_ioctl,
+       .d_name =       "ixgbe",
+};
+
 devclass_t ixgbe_devclass;
 DRIVER_MODULE(ixgbe, pci, ixgbe_driver, ixgbe_devclass, 0, 0);
 
@@ -399,6 +412,20 @@ ixgbe_probe(device_t dev)
 		ent++;
 	}
 	return (ENXIO);
+}
+
+static int
+ixgbe_makedev(struct adapter *adapter)
+{
+	adapter->cdev = make_dev(&ixgbe_cdevsw, adapter->ifp->if_dunit,
+	    UID_ROOT, GID_WHEEL, 0600, "%s", if_name(adapter->ifp));
+	
+	if (adapter->cdev == NULL)
+		return (ENOMEM);
+
+	adapter->cdev->si_drv1 = (void *)adapter;
+	
+	return (0);
 }
 
 /*********************************************************************
@@ -604,6 +631,11 @@ ixgbe_attach(device_t dev)
 #ifdef DEV_NETMAP
 	ixgbe_netmap_attach(adapter);
 #endif /* DEV_NETMAP */
+
+	error = ixgbe_makedev(adapter);
+	if (error)
+		goto err_late;
+
 	INIT_DEBUGOUT("ixgbe_attach: end");
 	return (0);
 err_late:
@@ -5803,3 +5835,37 @@ ixgbe_disable_rx_drop(struct adapter *adapter)
         	IXGBE_WRITE_REG(hw, IXGBE_SRRCTL(i), srrctl);
 	}
 }
+
+static int
+ixgbe_extension_open(struct cdev *dev, int flags, int fmp, struct thread *td)
+{
+       return (0);
+}
+
+static int
+ixgbe_extension_close(struct cdev *dev, int flags, int fmt, struct thread *td)
+{
+       return (0);
+}
+
+static int
+ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
+    int fflag, struct thread *td)
+{
+	int error = 0;
+	struct adapter *adapter = (struct adapter *)dev->si_drv1;
+
+	if (priv_check(td, PRIV_DRIVER)) {
+		return (EPERM);
+	}
+	
+	switch (cmd) {
+	default:
+		return (EOPNOTSUPP);
+		break;
+	}
+
+	return (error);
+}
+
+

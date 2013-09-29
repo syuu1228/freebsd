@@ -88,6 +88,8 @@
 #include <sys/pcpu.h>
 #include <sys/smp.h>
 #include <machine/smp.h>
+#include <sys/conf.h>
+#include <sys/priv.h>
 
 #include "ixgbe_api.h"
 
@@ -468,6 +470,8 @@ struct adapter {
 	unsigned long		link_irq;
 
 	struct ixgbe_hw_stats 	stats;
+
+	struct cdev		*cdev;
 };
 
 
