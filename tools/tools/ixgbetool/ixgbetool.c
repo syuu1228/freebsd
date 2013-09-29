@@ -64,8 +64,6 @@ doit(const char *iff_name, unsigned long cmd, void *data)
 	char buf[64];
 
 	snprintf(buf, 64, "/dev/%s", iff_name);
-	printf("iff_name:%s buf:%s\n", iff_name, buf);
-
 	if ((fd = open(buf, O_RDWR)) < 0)
 		return -1;
 	

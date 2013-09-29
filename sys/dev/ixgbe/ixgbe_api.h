@@ -144,6 +144,9 @@ s32 ixgbe_fdir_add_signature_filter_82599(struct ixgbe_hw *hw,
 					  union ixgbe_atr_hash_dword input,
 					  union ixgbe_atr_hash_dword common,
 					  u8 queue);
+s32 ixgbe_fdir_erase_signature_filter_82599(struct ixgbe_hw *hw,
+                                          union ixgbe_atr_hash_dword input,
+                                          union ixgbe_atr_hash_dword common);
 s32 ixgbe_fdir_set_input_mask_82599(struct ixgbe_hw *hw,
 				    union ixgbe_atr_input *input_mask);
 s32 ixgbe_fdir_write_perfect_filter_82599(struct ixgbe_hw *hw,

@@ -1482,7 +1482,8 @@ s32 ixgbe_init_fdir_signature_82599(struct ixgbe_hw *hw, u32 fdirctrl)
 	 *  Set the maximum length per hash bucket to 0xA filters
 	 *  Send interrupt when 64 filters are left
 	 */
-	fdirctrl |= (0x6 << IXGBE_FDIRCTRL_FLEX_SHIFT) |
+	fdirctrl |= IXGBE_FDIRCTRL_REPORT_STATUS |
+ 		    (0x6 << IXGBE_FDIRCTRL_FLEX_SHIFT) |
 		    (0xA << IXGBE_FDIRCTRL_MAX_LENGTH_SHIFT) |
 		    (4 << IXGBE_FDIRCTRL_FULL_THRESH_SHIFT);
 
@@ -1663,6 +1664,56 @@ s32 ixgbe_fdir_add_signature_filter_82599(struct ixgbe_hw *hw,
 	IXGBE_WRITE_REG64(hw, IXGBE_FDIRHASH, fdirhashcmd);
 
 	DEBUGOUT2("Tx Queue=%x hash=%x\n", queue, (u32)fdirhashcmd);
+
+	return IXGBE_SUCCESS;
+}
+
+/**
+ *  ixgbe_fdir_erase_signature_filter_82599 - Adds a signature hash filter
+ *  @hw: pointer to hardware structure
+ *  @stream: input bitstream
+ *  @queue: queue index to direct traffic to
+ **/
+s32 ixgbe_fdir_erase_signature_filter_82599(struct ixgbe_hw *hw,
+                                          union ixgbe_atr_hash_dword input,
+                                          union ixgbe_atr_hash_dword common)
+{
+	u64  fdirhashcmd;
+	u32  fdircmd;
+
+	DEBUGFUNC("ixgbe_fdir_clear_signature_filter_82599");
+
+	/*
+	 * Get the flow_type in order to program FDIRCMD properly
+	 * lowest 2 bits are FDIRCMD.L4TYPE, third lowest bit is FDIRCMD.IPV6
+	 */
+	switch (input.formatted.flow_type) {
+	case IXGBE_ATR_FLOW_TYPE_TCPV4:
+	case IXGBE_ATR_FLOW_TYPE_UDPV4:
+	case IXGBE_ATR_FLOW_TYPE_SCTPV4:
+	case IXGBE_ATR_FLOW_TYPE_TCPV6:
+	case IXGBE_ATR_FLOW_TYPE_UDPV6:
+	case IXGBE_ATR_FLOW_TYPE_SCTPV6:
+		break;
+	default:
+		DEBUGOUT(" Error on flow type input\n");
+		return IXGBE_ERR_CONFIG;
+	}
+
+	/* configure FDIRCMD register */
+	fdircmd = IXGBE_FDIRCMD_CMD_REMOVE_FLOW | 
+	          IXGBE_FDIRCMD_LAST | IXGBE_FDIRCMD_QUEUE_EN;
+	fdircmd |= input.formatted.flow_type << IXGBE_FDIRCMD_FLOW_TYPE_SHIFT;
+
+	/*
+	 * The lower 32-bits of fdirhashcmd is for FDIRHASH, the upper 32-bits
+	 * is for FDIRCMD.  Then do a 64-bit register write from FDIRHASH.
+	 */
+	fdirhashcmd = (u64)fdircmd << 32;
+	fdirhashcmd |= ixgbe_atr_compute_sig_hash_82599(input, common);
+	IXGBE_WRITE_REG64(hw, IXGBE_FDIRHASH, fdirhashcmd);
+
+	DEBUGOUT1("Tx hash=%x\n", (u32)fdirhashcmd);
 
 	return IXGBE_SUCCESS;
 }

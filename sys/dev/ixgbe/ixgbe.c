@@ -35,7 +35,9 @@
 
 #include "opt_inet.h"
 #include "opt_inet6.h"
+ 
 #include "ixgbe.h"
+#include "ixgbe_ioctl.h"
 
 /*********************************************************************
  *  Set this to one to display debug statistics
@@ -200,7 +202,9 @@ static void	ixgbe_handle_msf(void *, int);
 static void	ixgbe_handle_mod(void *, int);
 
 #ifdef IXGBE_FDIR
+#ifdef IXGBE_FDIR_ATR
 static void	ixgbe_atr(struct tx_ring *, struct mbuf *);
+#endif
 static void	ixgbe_reinit_fdir(void *, int);
 #endif
 
@@ -330,6 +334,7 @@ static bool ixgbe_rsc_enable = FALSE;
 static int ixgbe_total_ports;
 
 #ifdef IXGBE_FDIR
+#ifdef IXGBE_FDIR_ATR
 /*
 ** For Flow Director: this is the
 ** number of TX packets we sample
@@ -340,6 +345,7 @@ static int ixgbe_total_ports;
 ** setting this to 0.
 */
 static int atr_sample_rate = 20;
+#endif
 /* 
 ** Flow Director actually 'steals'
 ** part of the packet buffer as its
@@ -1844,7 +1850,7 @@ retry:
 		return (error);
 	}
 
-#ifdef IXGBE_FDIR
+#ifdef IXGBE_FDIR_ATR
 	/* Do the flow director magic */
 	if ((txr->atr_sample) && (!adapter->fdir_reinit)) {
 		++txr->atr_count;
@@ -3091,7 +3097,7 @@ ixgbe_setup_transmit_ring(struct tx_ring *txr)
 		txbuf->eop = NULL;
         }
 
-#ifdef IXGBE_FDIR
+#ifdef IXGBE_FDIR_ATR
 	/* Set the rate at which we sample packets */
 	if (adapter->hw.mac.type != ixgbe_mac_82598EB)
 		txr->atr_sample = atr_sample_rate;
@@ -3511,7 +3517,7 @@ ixgbe_tso_setup(struct tx_ring *txr, struct mbuf *mp,
 	return (0);
 }
 
-#ifdef IXGBE_FDIR
+#ifdef IXGBE_FDIR_ATR
 /*
 ** This routine parses packet headers so that Flow
 ** Director can make a hashed filter table entry 
@@ -5302,13 +5308,33 @@ ixgbe_update_stats_counters(struct adapter *adapter)
 	adapter->stats.xec += IXGBE_READ_REG(hw, IXGBE_XEC);
 	adapter->stats.fccrc += IXGBE_READ_REG(hw, IXGBE_FCCRC);
 	adapter->stats.fclast += IXGBE_READ_REG(hw, IXGBE_FCLAST);
-	/* Only read FCOE on 82599 */
+	/* Only read FCOE/FDIR on 82599 */
 	if (hw->mac.type != ixgbe_mac_82598EB) {
 		adapter->stats.fcoerpdc += IXGBE_READ_REG(hw, IXGBE_FCOERPDC);
 		adapter->stats.fcoeprc += IXGBE_READ_REG(hw, IXGBE_FCOEPRC);
 		adapter->stats.fcoeptc += IXGBE_READ_REG(hw, IXGBE_FCOEPTC);
 		adapter->stats.fcoedwrc += IXGBE_READ_REG(hw, IXGBE_FCOEDWRC);
 		adapter->stats.fcoedwtc += IXGBE_READ_REG(hw, IXGBE_FCOEDWTC);
+		adapter->stats.fdirfree_free =
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFREE) & IXGBE_FDIRFREE_FREE_MASK)
+			>> IXGBE_FDIRFREE_FREE_SHIFT;
+		adapter->stats.fdirfree_coll =
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFREE) & IXGBE_FDIRFREE_COLL_MASK)
+			>> IXGBE_FDIRFREE_COLL_SHIFT;
+		adapter->stats.fdirustat_add +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRUSTAT) & IXGBE_FDIRUSTAT_ADD_MASK)
+			>> IXGBE_FDIRUSTAT_ADD_SHIFT;
+		adapter->stats.fdirustat_remove +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRUSTAT) & IXGBE_FDIRUSTAT_REMOVE_MASK)
+			>> IXGBE_FDIRUSTAT_REMOVE_SHIFT;
+		adapter->stats.fdirfstat_fadd +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFSTAT) & IXGBE_FDIRFSTAT_FADD_MASK)
+			>> IXGBE_FDIRFSTAT_FADD_SHIFT;
+		adapter->stats.fdirfstat_fremove +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFSTAT) & IXGBE_FDIRFSTAT_FREMOVE_MASK)
+			>> IXGBE_FDIRFSTAT_FREMOVE_SHIFT;
+		adapter->stats.fdirmatch += IXGBE_READ_REG(hw, IXGBE_FDIRMATCH);
+		adapter->stats.fdirmiss += IXGBE_READ_REG(hw, IXGBE_FDIRMISS);
 	}
 
 	/* Fill out the OS statistics structure */
@@ -5674,6 +5700,32 @@ ixgbe_add_hw_stats(struct adapter *adapter)
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "tx_frames_1024_1522",
 			CTLFLAG_RD, &stats->ptc1522,
 			"1024-1522 byte frames transmitted");
+
+	/* fdir stats */
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfree_free",
+		CTLFLAG_RD, &stats->fdirfree_free,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfree_coll",
+		CTLFLAG_RD, &stats->fdirfree_coll,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirustat_add",
+		CTLFLAG_RD, &stats->fdirustat_add,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirustat_remove",
+		CTLFLAG_RD, &stats->fdirustat_remove,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfstat_fadd",
+		CTLFLAG_RD, &stats->fdirfstat_fadd,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfstat_fremove",
+		CTLFLAG_RD, &stats->fdirfstat_fremove,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmatch",
+		CTLFLAG_RD, &stats->fdirmatch,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmiss",
+		CTLFLAG_RD, &stats->fdirmiss,
+		"");
 }
 
 /*
@@ -5852,7 +5904,6 @@ static int
 ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
     int fflag, struct thread *td)
 {
-	int error = 0;
 	struct adapter *adapter = (struct adapter *)dev->si_drv1;
 
 	if (priv_check(td, PRIV_DRIVER)) {
@@ -5860,12 +5911,59 @@ ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 	}
 	
 	switch (cmd) {
+	case IXGBE_ADD_SIGFILTER: {
+		struct ix_filter *filter = (struct ix_filter *)data;
+		union ixgbe_atr_hash_dword input = {.dword = 0};
+		union ixgbe_atr_hash_dword common = {.dword = 0};
+
+		switch (filter->proto) {
+		case IXGBE_FILTER_PROTO_TCPV4:
+			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_TCPV4;
+			break;
+		case IXGBE_FILTER_PROTO_UDPV4:
+			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_UDPV4;
+			break;
+		default:
+			return (EINVAL);
+		}
+		common.port.src ^= htons(filter->src_port);
+		common.port.dst ^= htons(filter->dst_port);
+		common.flex_bytes ^= htons(ETHERTYPE_IP);
+		common.ip ^= filter->src_ip.s_addr ^ filter->dst_ip.s_addr;
+
+		ixgbe_fdir_add_signature_filter_82599(&adapter->hw,
+			input, common, filter->que_index);
+		break;
+	}
+	case IXGBE_CLR_SIGFILTER: {
+		struct ix_filter *filter = (struct ix_filter *)data;
+		union ixgbe_atr_hash_dword input = {.dword = 0};
+		union ixgbe_atr_hash_dword common = {.dword = 0};
+
+		switch (filter->proto) {
+		case IXGBE_FILTER_PROTO_TCPV4:
+			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_TCPV4;
+			break;
+		case IXGBE_FILTER_PROTO_UDPV4:
+			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_UDPV4;
+			break;
+		default:
+			return (EINVAL);
+		}
+		common.port.src ^= htons(filter->src_port);
+		common.port.dst ^= htons(filter->dst_port);
+		common.flex_bytes ^= htons(ETHERTYPE_IP);
+		common.ip ^= filter->src_ip.s_addr ^ filter->dst_ip.s_addr;
+
+		ixgbe_fdir_erase_signature_filter_82599(&adapter->hw,
+			input, common);
+		break;
+	}
 	default:
 		return (EOPNOTSUPP);
 		break;
 	}
 
-	return (error);
+	return (0);
 }
-
 
