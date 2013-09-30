@@ -57,24 +57,8 @@ usage(void)
 	fprintf(stderr, "\tdel_sig_filter <id>\n");
 }
 
-static int
-doit(const char *iff_name, unsigned long cmd, void *data)
-{
-	int fd = 0;
-	int err;
-	char buf[64];
-
-	snprintf(buf, 64, "/dev/%s", iff_name);
-	if ((fd = open(buf, O_RDWR)) < 0)
-		return -1;
-	
-	err = ioctl(fd, cmd, data) < 0 ? -1 : 0;
-	close(fd);
-	return err;
-}
-
 static int 
-add_sig_filter(int argc, char *argv[], char *ifname)
+add_sig_filter(int fd, int argc, char *argv[])
 {
 	struct ix_filter filter;
 	int error;
@@ -107,9 +91,12 @@ add_sig_filter(int argc, char *argv[], char *ifname)
 	if (errno)
 		return errno;
 
-	error = doit(ifname, IXGBE_ADD_SIGFILTER, (void *)&filter);
-	if (error)
-		perror("ioctl");
+	error = ioctl(fd, IXGBE_ADD_SIGFILTER, &filter);
+	if (error) {
+		perror("ixgbetool");
+		close(fd);
+		exit(1);
+	}
 	return 0;
 }
 
@@ -132,7 +119,7 @@ filter_proto_str(int proto)
 }
 
 static int 
-show_sig_filter(int argc, char *argv[], char *ifname)
+show_sig_filter(int fd, int argc, char *argv[])
 {
 	unsigned i;
 	unsigned len;
@@ -141,14 +128,18 @@ show_sig_filter(int argc, char *argv[], char *ifname)
 	if (argc != 3) 
 		return -1;
 
-	error = doit(ifname, IXGBE_GET_SIGFILTER_LEN, (void *)&len);
-	if (error)
-		perror("ioctl");
+	error = ioctl(fd, IXGBE_GET_SIGFILTER_LEN, &len);
+	if (error) {
+		perror("ixgbetool");
+		close(fd);
+		exit(1);
+	}
 
 	for (i = 0; i < len; i++) {
 		struct ix_filter filter;
+
 		filter.id = i;
-		error = doit(ifname, IXGBE_GET_SIGFILTER, (void *)&filter);
+		error = ioctl(fd, IXGBE_GET_SIGFILTER, &filter);
 		if (error)
 			continue;
 		printf("id: %u\n", filter.id);
@@ -164,7 +155,7 @@ show_sig_filter(int argc, char *argv[], char *ifname)
 }
 
 static int 
-del_sig_filter(int argc, char *argv[], char *ifname)
+del_sig_filter(int fd, int argc, char *argv[])
 {
 	unsigned id;
 	int error;
@@ -177,9 +168,12 @@ del_sig_filter(int argc, char *argv[], char *ifname)
 	if (errno)
 		return errno;
 
-	error = doit(ifname, IXGBE_CLR_SIGFILTER, (void *)&id);
-	if (error)
-		perror("ioctl");
+	error = ioctl(fd, IXGBE_CLR_SIGFILTER, &id);
+	if (error) {
+		perror("ixgbetool");
+		close(fd);
+		exit(1);
+	}
 	return 0;
 }
 
@@ -187,24 +181,31 @@ int
 main(int argc, char *argv[])
 {
 	int ret;
-	char *ifname;
+	char buf[64];
+	int fd;
 
 	if (argc < 3) {
 		usage();
 		exit(1);
 	}
-	ifname = argv[1];
+	snprintf(buf, 64, "/dev/%s", argv[1]);
+	if ((fd = open(buf, O_RDWR)) < 0) {
+		perror("ixgbetool");
+		exit(1);
+	}
 	if (!strcmp(argv[2], "add_sig_filter"))
-		ret = add_sig_filter(argc, argv, ifname);
+		ret = add_sig_filter(fd, argc, argv);
 	else if (!strcmp(argv[2], "show_sig_filter"))
-		ret = show_sig_filter(argc, argv, ifname);
+		ret = show_sig_filter(fd, argc, argv);
 	else if (!strcmp(argv[2], "del_sig_filter"))
-		ret = del_sig_filter(argc, argv, ifname);
+		ret = del_sig_filter(fd, argc, argv);
 	else 
 		ret = -1;
 
 	if (ret)
 		usage();
+
+	close(fd);
 
 	return (ret);
 }
