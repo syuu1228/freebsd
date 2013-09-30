@@ -88,8 +88,6 @@
 #include <sys/pcpu.h>
 #include <sys/smp.h>
 #include <machine/smp.h>
-#include <sys/conf.h>
-#include <sys/priv.h>
 
 #include "ixgbe_api.h"
 #include "ixgbe_ufilter.h"

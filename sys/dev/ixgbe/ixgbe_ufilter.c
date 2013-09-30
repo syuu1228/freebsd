@@ -1,5 +1,7 @@
 
 #include "ixgbe.h"
+#include <sys/conf.h>
+#include <sys/priv.h>
 
 #ifdef IXGBE_FDIR
 static d_open_t ixgbe_ufilter_open;
