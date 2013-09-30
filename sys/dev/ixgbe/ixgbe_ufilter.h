@@ -53,17 +53,16 @@ struct ufilter_entry {
 #define IXGBE_GET_SIGFILTER_LEN _IOR('i', 0x3, unsigned)
 
 #ifdef _KERNEL
+#ifdef IXGBE_FDIR
 #include <sys/rmlock.h>
 
 struct ufilter_kentry {
 	struct ufilter_entry e;
 	TAILQ_ENTRY(ufilter_kentry) tq_link;
 	LIST_ENTRY(ufilter_kentry) li_link;
-#ifdef COOPERATIVE_ATR 
 	union ixgbe_atr_hash_dword input;
 	union ixgbe_atr_hash_dword common;
 	u32 hash;
-#endif
 };
 
 struct ixgbe_ufilter {
@@ -71,20 +70,16 @@ struct ixgbe_ufilter {
 	TAILQ_HEAD(, ufilter_kentry) list;
 	struct mtx		mtx;
 	unsigned		next_id;
-#ifdef COOPERATIVE_ATR 
 	LIST_HEAD(, ufilter_kentry) *hash;
 	u_long			hashmask;
 	struct rmlock		hashlock;
-#endif
 };
 
-#ifdef IXGBE_FDIR
 struct adapter;
 int ixgbe_ufilter_attach(struct adapter *adapter);
 int ixgbe_ufilter_detach(struct adapter *adapter);
-#ifdef COOPERATIVE_ATR 
+extern int ixgbe_cooperative_atr;
 int ixgbe_ufilter_exists(struct adapter *adapter, u32 hash);
-#endif /* COOPERATIVE_ATR */
 #endif /* IXGBE_FDIR */
 #endif /* _KERNEL */
 #endif /* __IXGBEUFILTER_H__ */

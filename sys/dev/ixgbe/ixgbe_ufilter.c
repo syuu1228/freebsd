@@ -16,6 +16,8 @@ static struct cdevsw cdevsw = {
 
 static int ufilter_hash_size = 65536;
 TUNABLE_INT("hw.ixgbe.ufilter_hash_size", &ufilter_hash_size);
+int ixgbe_cooperative_atr = 0;
+TUNABLE_INT("hw.ixgbe.cooperative_atr", &ixgbe_cooperative_atr);
 
 static inline void
 list_insert(struct ixgbe_ufilter *ufilter, struct ufilter_kentry *ke)
@@ -49,7 +51,6 @@ list_freeall(struct ixgbe_ufilter *ufilter)
 		free(ke, M_DEVBUF);
 }
 
-#ifdef COOPERATIVE_ATR 
 static inline void
 hash_insert(struct ixgbe_ufilter *ufilter, struct ufilter_kentry *ke)
 {
@@ -94,7 +95,6 @@ ixgbe_ufilter_exists(struct adapter *adapter, u32 hash)
 
 	return (found);
 }
-#endif /* COOPERATIVE_ATR */
 
 int
 ixgbe_ufilter_attach(struct adapter *adapter)
@@ -108,12 +108,21 @@ ixgbe_ufilter_attach(struct adapter *adapter)
 		
 	mtx_init(&adapter->ufilter.mtx, "ufilter_mtx", NULL, MTX_DEF);
 	TAILQ_INIT(&adapter->ufilter.list);
-#ifdef COOPERATIVE_ATR
-	adapter->ufilter.hash = hashinit(ufilter_hash_size, M_DEVBUF,
-		&adapter->ufilter.hashmask);
-	rm_init_flags(&adapter->ufilter.hashlock, "ufilter_hashlock", 
-		RM_NOWITNESS);
-#endif
+	if (ixgbe_cooperative_atr) {
+		adapter->ufilter.hash = hashinit(ufilter_hash_size, M_DEVBUF,
+			&adapter->ufilter.hashmask);
+		rm_init_flags(&adapter->ufilter.hashlock, "ufilter_hashlock", 
+			RM_NOWITNESS);
+	}
+        SYSCTL_ADD_INT(device_get_sysctl_ctx(adapter->dev),
+			SYSCTL_CHILDREN(device_get_sysctl_tree(adapter->dev)),
+			OID_AUTO, "ufilter_hash_size", CTLTYPE_INT|CTLFLAG_RD,
+			&ufilter_hash_size, 20, "ufilter hashtable size");
+        SYSCTL_ADD_INT(device_get_sysctl_ctx(adapter->dev),
+			SYSCTL_CHILDREN(device_get_sysctl_tree(adapter->dev)),
+			OID_AUTO, "cooperative_atr", CTLTYPE_INT|CTLFLAG_RD,
+			&ixgbe_cooperative_atr, 20, "cooperative ATR");
+
 	return (0);
 }
 
@@ -121,11 +130,11 @@ int
 ixgbe_ufilter_detach(struct adapter *adapter)
 {
 	list_freeall(&adapter->ufilter);
-#ifdef COOPERATIVE_ATR
-	rm_destroy(&adapter->ufilter.hashlock);
-	hashdestroy(adapter->ufilter.hash, M_DEVBUF, 
-		adapter->ufilter.hashmask);
-#endif
+	if (ixgbe_cooperative_atr) {
+		rm_destroy(&adapter->ufilter.hashlock);
+		hashdestroy(adapter->ufilter.hash, M_DEVBUF, 
+			adapter->ufilter.hashmask);
+	}
 	mtx_destroy(&adapter->ufilter.mtx);
 	if (adapter->ufilter.cdev)
 		destroy_dev(adapter->ufilter.cdev);
@@ -156,11 +165,8 @@ ixgbe_ufilter_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 		return (EPERM);
 	}
 
-#ifndef COOPERATIVE_ATR
-	if (atr_sample_rate > 0) {
+	if (!ixgbe_cooperative_atr && ixgbe_atr_sample_rate)
 		return (ENODEV);
-	}
-#endif
 
 	mtx_lock(&ufilter->mtx);
 	switch (cmd) {
@@ -193,12 +199,13 @@ ixgbe_ufilter_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 		}
 		memcpy(&ke->e, e, sizeof(ke->e));
 		ke->e.id = ufilter->next_id++;
-#ifdef COOPERATIVE_ATR 
 		ke->input = input;
 		ke->common = common;
-		ke->hash = ixgbe_atr_compute_sig_hash_82599(input, common);
-		hash_insert(ufilter, ke);
-#endif
+		if (ixgbe_cooperative_atr) {
+			ke->hash = ixgbe_atr_compute_sig_hash_82599(input, 
+				common);
+			hash_insert(ufilter, ke);
+		}
 		list_insert(ufilter, ke);
 		ixgbe_fdir_add_signature_filter_82599(&adapter->hw,
 			input, common, e->que_index);
@@ -225,9 +232,8 @@ ixgbe_ufilter_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 			goto out;
 		}
 
-#ifdef COOPERATIVE_ATR 
-		hash_remove(ufilter, ke);
-#endif
+		if (ixgbe_cooperative_atr)
+			hash_remove(ufilter, ke);
 		list_remove(ufilter, ke);
 
 		ixgbe_fdir_erase_signature_filter_82599(&adapter->hw,

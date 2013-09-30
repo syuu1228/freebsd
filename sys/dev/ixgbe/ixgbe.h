@@ -472,7 +472,9 @@ struct adapter {
 
 	struct ixgbe_hw_stats 	stats;
 
+#ifdef IXGBE_FDIR
 	struct ixgbe_ufilter	ufilter;
+#endif
 };
 
 /* Precision Time Sync (IEEE 1588) defines */
@@ -543,5 +545,9 @@ ixgbe_rx_unrefreshed(struct rx_ring *rxr)
 		return ((rxr->num_desc + rxr->next_to_check) -
 		    rxr->next_to_refresh - 1);
 }       
+
+#ifdef IXGBE_FDIR
+extern int ixgbe_atr_sample_rate;
+#endif
 
 #endif /* _IXGBE_H_ */

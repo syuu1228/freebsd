@@ -46,7 +46,8 @@ __FBSDID("$FreeBSD$");
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/ioctl.h>
-#include <ixgbe_ioctl.h>
+#include <sys/sysctl.h>
+#include <ixgbe_ufilter.h>
 
 static void
 usage(void)
@@ -60,16 +61,16 @@ usage(void)
 static int 
 add_sig_filter(int fd, int argc, char *argv[])
 {
-	struct ix_filter filter;
+	struct ufilter_entry filter;
 	int error;
 
 	if (argc != 9) 
 		return -1;
 
 	if (!strcmp(argv[3], "tcpv4"))
-		filter.proto = IXGBE_FILTER_PROTO_TCPV4;
+		filter.proto = UFILTER_PROTO_TCPV4;
 	else if (!strcmp(argv[3], "udpv4"))
-		filter.proto = IXGBE_FILTER_PROTO_UDPV4;
+		filter.proto = UFILTER_PROTO_UDPV4;
 	else
 		return -1;
 	error = inet_aton(argv[4], &filter.src_ip);
@@ -106,10 +107,10 @@ filter_proto_str(int proto)
 	const char *str;
 
 	switch (proto) {
-	case IXGBE_FILTER_PROTO_TCPV4:
+	case UFILTER_PROTO_TCPV4:
 		str = "tcpv4";
 		break;
-	case IXGBE_FILTER_PROTO_UDPV4:
+	case UFILTER_PROTO_UDPV4:
 		str = "udpv4";
 		break;
 	default:
@@ -136,7 +137,7 @@ show_sig_filter(int fd, int argc, char *argv[])
 	}
 
 	for (i = 0; i < len; i++) {
-		struct ix_filter filter;
+		struct ufilter_entry filter;
 
 		filter.id = i;
 		error = ioctl(fd, IXGBE_GET_SIGFILTER, &filter);
@@ -183,18 +184,35 @@ main(int argc, char *argv[])
 	int ret;
 	char buf[64];
 	int fd;
+	int ifno;
+	int coop_atr;
+	int atr;
+	size_t coop_atr_size;
+	size_t atr_size;
 
 	if (argc < 3) {
 		usage();
 		exit(1);
 	}
-	snprintf(buf, 64, "/dev/%s", argv[1]);
+	snprintf(buf, sizeof(buf), "/dev/%s", argv[1]);
 	if ((fd = open(buf, O_RDWR)) < 0) {
 		perror("ixgbetool");
 		exit(1);
 	}
-	ret = ioctl(fd, IXGBE_GET_ATR_SAMPLE_RATE);
+	sscanf(argv[1], "ix%d", &ifno);
+	snprintf(buf, sizeof(buf), "dev.ix.%d.cooperative_atr", ifno);
+	ret = sysctlbyname(buf, &coop_atr, &coop_atr_size, NULL, 0);
 	if (ret) {
+		perror("ixgbetool");
+		exit(1);
+	}
+	snprintf(buf, sizeof(buf), "dev.ix.%d.atr_sample_rate", ifno);
+	ret = sysctlbyname(buf, &atr, &atr_size, NULL, 0);
+	if (ret) {
+		perror("ixgbetool");
+		exit(1);
+	}
+	if (!coop_atr && atr) {
 		printf("Before costomize signature filter, you need to add 'hw.ixgbe.atr_sample_rate=0' on /boot/loader.conf and reboot\n");
 		close(fd);
 		exit(1);

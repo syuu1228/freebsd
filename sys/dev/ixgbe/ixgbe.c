@@ -326,8 +326,8 @@ static int ixgbe_total_ports;
 ** This feature can be disabled by 
 ** setting this to 0.
 */
-static int atr_sample_rate = 20;
-TUNABLE_INT("hw.ixgbe.atr_sample_rate", &atr_sample_rate);
+int ixgbe_atr_sample_rate = 20;
+TUNABLE_INT("hw.ixgbe.atr_sample_rate", &ixgbe_atr_sample_rate);
 /* 
 ** Flow Director actually 'steals'
 ** part of the packet buffer as its
@@ -447,7 +447,7 @@ ixgbe_attach(device_t dev)
         SYSCTL_ADD_INT(device_get_sysctl_ctx(dev),
 			SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
 			OID_AUTO, "atr_sample_rate", CTLTYPE_INT|CTLFLAG_RD,
-			&atr_sample_rate, 20, "ATR sample rate");
+			&ixgbe_atr_sample_rate, 20, "ATR sample rate");
 #endif
 
 	/*
@@ -1835,7 +1835,7 @@ retry:
 	/* Do the flow director magic */
 	if ((txr->atr_sample) && (!adapter->fdir_reinit)) {
 		++txr->atr_count;
-		if (txr->atr_count >= atr_sample_rate) {
+		if (txr->atr_count >= ixgbe_atr_sample_rate) {
 			ixgbe_atr(txr, m_head);
 			txr->atr_count = 0;
 		}
@@ -3081,7 +3081,7 @@ ixgbe_setup_transmit_ring(struct tx_ring *txr)
 #ifdef IXGBE_FDIR
 	/* Set the rate at which we sample packets */
 	if (adapter->hw.mac.type != ixgbe_mac_82598EB)
-		txr->atr_sample = atr_sample_rate;
+		txr->atr_sample = ixgbe_atr_sample_rate;
 #endif
 
 	/* Set number of descriptors available */
@@ -3520,9 +3520,6 @@ ixgbe_atr(struct tx_ring *txr, struct mbuf *mp)
 	union ixgbe_atr_hash_dword	common = {.dword = 0}; 
 	int  				ehdrlen, ip_hlen;
 	u16				etype;
-#ifdef COOPERATIVE_ATR 
-	u32				hash;
-#endif
 
 	eh = mtod(mp, struct ether_vlan_header *);
 	if (eh->evl_encap_proto == htons(ETHERTYPE_VLAN)) {
@@ -3569,11 +3566,12 @@ ixgbe_atr(struct tx_ring *txr, struct mbuf *mp)
 
 	que = &adapter->queues[txr->me];
 
-#ifdef COOPERATIVE_ATR 
-	hash = ixgbe_atr_compute_sig_hash_82599(input, common);
-	if (ixgbe_ufilter_exists(adapter, hash))
-		return;
-#endif
+	if (ixgbe_cooperative_atr) {
+		u32 hash;
+		hash = ixgbe_atr_compute_sig_hash_82599(input, common);
+		if (ixgbe_ufilter_exists(adapter, hash))
+			return;
+	}
 	/*
 	** This assumes the Rx queue and Tx
 	** queue are bound to the same CPU
