@@ -1482,7 +1482,8 @@ s32 ixgbe_init_fdir_signature_82599(struct ixgbe_hw *hw, u32 fdirctrl)
 	 *  Set the maximum length per hash bucket to 0xA filters
 	 *  Send interrupt when 64 filters are left
 	 */
-	fdirctrl |= (0x6 << IXGBE_FDIRCTRL_FLEX_SHIFT) |
+	fdirctrl |= IXGBE_FDIRCTRL_REPORT_STATUS |
+ 		    (0x6 << IXGBE_FDIRCTRL_FLEX_SHIFT) |
 		    (0xA << IXGBE_FDIRCTRL_MAX_LENGTH_SHIFT) |
 		    (4 << IXGBE_FDIRCTRL_FULL_THRESH_SHIFT);
 

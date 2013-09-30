@@ -5270,13 +5270,33 @@ ixgbe_update_stats_counters(struct adapter *adapter)
 	adapter->stats.xec += IXGBE_READ_REG(hw, IXGBE_XEC);
 	adapter->stats.fccrc += IXGBE_READ_REG(hw, IXGBE_FCCRC);
 	adapter->stats.fclast += IXGBE_READ_REG(hw, IXGBE_FCLAST);
-	/* Only read FCOE on 82599 */
+	/* Only read FCOE/FDIR on 82599 */
 	if (hw->mac.type != ixgbe_mac_82598EB) {
 		adapter->stats.fcoerpdc += IXGBE_READ_REG(hw, IXGBE_FCOERPDC);
 		adapter->stats.fcoeprc += IXGBE_READ_REG(hw, IXGBE_FCOEPRC);
 		adapter->stats.fcoeptc += IXGBE_READ_REG(hw, IXGBE_FCOEPTC);
 		adapter->stats.fcoedwrc += IXGBE_READ_REG(hw, IXGBE_FCOEDWRC);
 		adapter->stats.fcoedwtc += IXGBE_READ_REG(hw, IXGBE_FCOEDWTC);
+		adapter->stats.fdirfree_free =
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFREE) & IXGBE_FDIRFREE_FREE_MASK)
+			>> IXGBE_FDIRFREE_FREE_SHIFT;
+		adapter->stats.fdirfree_coll =
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFREE) & IXGBE_FDIRFREE_COLL_MASK)
+			>> IXGBE_FDIRFREE_COLL_SHIFT;
+		adapter->stats.fdirustat_add +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRUSTAT) & IXGBE_FDIRUSTAT_ADD_MASK)
+			>> IXGBE_FDIRUSTAT_ADD_SHIFT;
+		adapter->stats.fdirustat_remove +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRUSTAT) & IXGBE_FDIRUSTAT_REMOVE_MASK)
+			>> IXGBE_FDIRUSTAT_REMOVE_SHIFT;
+		adapter->stats.fdirfstat_fadd +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFSTAT) & IXGBE_FDIRFSTAT_FADD_MASK)
+			>> IXGBE_FDIRFSTAT_FADD_SHIFT;
+		adapter->stats.fdirfstat_fremove +=
+			(IXGBE_READ_REG(hw, IXGBE_FDIRFSTAT) & IXGBE_FDIRFSTAT_FREMOVE_MASK)
+			>> IXGBE_FDIRFSTAT_FREMOVE_SHIFT;
+		adapter->stats.fdirmatch += IXGBE_READ_REG(hw, IXGBE_FDIRMATCH);
+		adapter->stats.fdirmiss += IXGBE_READ_REG(hw, IXGBE_FDIRMISS);
 	}
 
 	/* Fill out the OS statistics structure */
@@ -5642,6 +5662,32 @@ ixgbe_add_hw_stats(struct adapter *adapter)
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "tx_frames_1024_1522",
 			CTLFLAG_RD, &stats->ptc1522,
 			"1024-1522 byte frames transmitted");
+
+	/* fdir stats */
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfree_free",
+		CTLFLAG_RD, &stats->fdirfree_free,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfree_coll",
+		CTLFLAG_RD, &stats->fdirfree_coll,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirustat_add",
+		CTLFLAG_RD, &stats->fdirustat_add,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirustat_remove",
+		CTLFLAG_RD, &stats->fdirustat_remove,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfstat_fadd",
+		CTLFLAG_RD, &stats->fdirfstat_fadd,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfstat_fremove",
+		CTLFLAG_RD, &stats->fdirfstat_fremove,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmatch",
+		CTLFLAG_RD, &stats->fdirmatch,
+		"");
+	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmiss",
+		CTLFLAG_RD, &stats->fdirmiss,
+		"");
 }
 
 /*
