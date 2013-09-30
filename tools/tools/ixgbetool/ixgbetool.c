@@ -53,7 +53,8 @@ usage(void)
 {
 	fprintf(stderr, "Usage: ixgbetool <ifname> [operation]\n");
 	fprintf(stderr, "\tadd_sig_filter <proto> <src_ip> <src_port> <dst_ip> <dst_port> <que_index>\n");
-	fprintf(stderr, "\tdel_sig_filter <proto> <src_ip> <src_port> <dst_ip> <dst_port>\n");
+	fprintf(stderr, "\tshow_sig_filter\n");
+	fprintf(stderr, "\tdel_sig_filter <id>\n");
 }
 
 static int
@@ -112,37 +113,71 @@ add_sig_filter(int argc, char *argv[], char *ifname)
 	return 0;
 }
 
+static inline const char *
+filter_proto_str(int proto)
+{
+	const char *str;
+
+	switch (proto) {
+	case IXGBE_FILTER_PROTO_TCPV4:
+		str = "tcpv4";
+		break;
+	case IXGBE_FILTER_PROTO_UDPV4:
+		str = "udpv4";
+		break;
+	default:
+		str = "(inval)";
+	}
+	return str;
+}
+
+static int 
+show_sig_filter(int argc, char *argv[], char *ifname)
+{
+	unsigned i;
+	unsigned len;
+	int error;
+
+	if (argc != 3) 
+		return -1;
+
+	error = doit(ifname, IXGBE_GET_SIGFILTER_LEN, (void *)&len);
+	if (error)
+		perror("ioctl");
+
+	for (i = 0; i < len; i++) {
+		struct ix_filter filter;
+		filter.id = i;
+		error = doit(ifname, IXGBE_GET_SIGFILTER, (void *)&filter);
+		if (error)
+			continue;
+		printf("id: %u\n", filter.id);
+		printf("proto: %s\n", filter_proto_str(filter.proto));
+		printf("src_ip: %s\n", inet_ntoa(filter.src_ip));
+		printf("src_port: %d\n", filter.src_port);
+		printf("dst_ip: %s\n", inet_ntoa(filter.dst_ip));
+		printf("dst_port: %d\n", filter.dst_port);
+		printf("que_index: %d\n", filter.que_index);
+		printf("\n");
+	}
+	return 0;
+}
+
 static int 
 del_sig_filter(int argc, char *argv[], char *ifname)
 {
-	struct ix_filter filter;
+	unsigned id;
 	int error;
 
-	if (argc != 8) 
+	if (argc != 4) 
 		return -1;
 
-	if (!strcmp(argv[3], "tcpv4"))
-		filter.proto = IXGBE_FILTER_PROTO_TCPV4;
-	else if (!strcmp(argv[3], "udpv4"))
-		filter.proto = IXGBE_FILTER_PROTO_UDPV4;
-	else
-		return -1;
-	error = inet_aton(argv[4], &filter.src_ip);
-	if (error != 1)
-		return error;
 	errno = 0;
-	filter.src_port = strtol(argv[5], NULL, 0);
-	if (errno)
-		return errno;
-	error = inet_aton(argv[6], &filter.dst_ip);
-	if (error != 1)
-		return error;
-	errno = 0;
-	filter.dst_port = strtol(argv[7], NULL, 0);
+	id = strtoul(argv[3], NULL, 0);
 	if (errno)
 		return errno;
 
-	error = doit(ifname, IXGBE_CLR_SIGFILTER, (void *)&filter);
+	error = doit(ifname, IXGBE_CLR_SIGFILTER, (void *)&id);
 	if (error)
 		perror("ioctl");
 	return 0;
@@ -161,6 +196,8 @@ main(int argc, char *argv[])
 	ifname = argv[1];
 	if (!strcmp(argv[2], "add_sig_filter"))
 		ret = add_sig_filter(argc, argv, ifname);
+	else if (!strcmp(argv[2], "show_sig_filter"))
+		ret = show_sig_filter(argc, argv, ifname);
 	else if (!strcmp(argv[2], "del_sig_filter"))
 		ret = del_sig_filter(argc, argv, ifname);
 	else 

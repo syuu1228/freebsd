@@ -34,7 +34,9 @@ $FreeBSD$
 
 enum {
 	IX_ADD_SIGFILTER = 0x0,
-	IX_CLR_SIGFILTER
+	IX_GET_SIGFILTER,
+	IX_CLR_SIGFILTER,
+	IX_GET_SIGFILTER_LEN
 };
 
 enum {
@@ -43,6 +45,7 @@ enum {
 };
 
 struct ix_filter {
+	unsigned id;
 	int proto;
 	struct in_addr src_ip;
 	int src_port;
@@ -52,7 +55,9 @@ struct ix_filter {
 };
 
 #define IXGBE_ADD_SIGFILTER	_IOW('i', IX_ADD_SIGFILTER, struct ix_filter)
-#define IXGBE_CLR_SIGFILTER	_IOW('i', IX_CLR_SIGFILTER, struct ix_filter)
+#define IXGBE_GET_SIGFILTER	_IOWR('i', IX_GET_SIGFILTER, struct ix_filter)
+#define IXGBE_CLR_SIGFILTER	_IOW('i', IX_CLR_SIGFILTER, unsigned)
+#define IXGBE_GET_SIGFILTER_LEN _IOR('i', IX_GET_SIGFILTER_LEN, unsigned)
 
 #endif
 

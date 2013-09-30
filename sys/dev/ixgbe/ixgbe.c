@@ -37,7 +37,6 @@
 #include "opt_inet6.h"
  
 #include "ixgbe.h"
-#include "ixgbe_ioctl.h"
 
 /*********************************************************************
  *  Set this to one to display debug statistics
@@ -641,6 +640,9 @@ ixgbe_attach(device_t dev)
 	error = ixgbe_makedev(adapter);
 	if (error)
 		goto err_late;
+	
+	mtx_init(&adapter->filter_mtx, "filter_mtx", NULL, MTX_DEF);
+	TAILQ_INIT(&adapter->filter_list);
 
 	INIT_DEBUGOUT("ixgbe_attach: end");
 	return (0);
@@ -5900,19 +5902,33 @@ ixgbe_extension_close(struct cdev *dev, int flags, int fmt, struct thread *td)
        return (0);
 }
 
+static struct ix_filter_entry *
+ixgbe_find_filter(struct adapter *adapter, unsigned id)
+{
+	struct ix_filter_entry *entry;
+
+	TAILQ_FOREACH(entry, &adapter->filter_list, link)
+		if (entry->filter.id == id)
+			return entry;
+	return NULL;
+}
+
 static int
 ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
     int fflag, struct thread *td)
 {
 	struct adapter *adapter = (struct adapter *)dev->si_drv1;
+	int error = 0;
 
 	if (priv_check(td, PRIV_DRIVER)) {
 		return (EPERM);
 	}
 	
+	mtx_lock(&adapter->filter_mtx);
 	switch (cmd) {
 	case IXGBE_ADD_SIGFILTER: {
 		struct ix_filter *filter = (struct ix_filter *)data;
+		struct ix_filter_entry *entry;
 		union ixgbe_atr_hash_dword input = {.dword = 0};
 		union ixgbe_atr_hash_dword common = {.dword = 0};
 
@@ -5924,23 +5940,51 @@ ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_UDPV4;
 			break;
 		default:
-			return (EINVAL);
+			error = EINVAL;
+			goto out;
 		}
 		common.port.src ^= htons(filter->src_port);
 		common.port.dst ^= htons(filter->dst_port);
 		common.flex_bytes ^= htons(ETHERTYPE_IP);
 		common.ip ^= filter->src_ip.s_addr ^ filter->dst_ip.s_addr;
+
+		entry = malloc(sizeof(*entry), M_DEVBUF, M_NOWAIT | M_ZERO);
+		if (!entry) {
+			error = ENOMEM;
+			goto out;
+		}
+		memcpy(&entry->filter, filter, sizeof(entry->filter));
+		entry->filter.id = adapter->next_filter_id++;
+		TAILQ_INSERT_TAIL(&adapter->filter_list, entry, link);
 
 		ixgbe_fdir_add_signature_filter_82599(&adapter->hw,
 			input, common, filter->que_index);
 		break;
 	}
-	case IXGBE_CLR_SIGFILTER: {
+	case IXGBE_GET_SIGFILTER: {
 		struct ix_filter *filter = (struct ix_filter *)data;
+		struct ix_filter_entry *entry;
+
+		entry = ixgbe_find_filter(adapter, filter->id);
+		if (entry)
+			memcpy(filter, &entry->filter, sizeof(*filter));
+		else
+			error = ENOENT;
+		break;
+	};
+	case IXGBE_CLR_SIGFILTER: {
+		unsigned *id = (unsigned *)data;
+		struct ix_filter_entry *entry;
 		union ixgbe_atr_hash_dword input = {.dword = 0};
 		union ixgbe_atr_hash_dword common = {.dword = 0};
 
-		switch (filter->proto) {
+		entry = ixgbe_find_filter(adapter, *id);
+		if (!entry) {
+			error = ENOENT;
+			goto out;
+		}
+
+		switch (entry->filter.proto) {
 		case IXGBE_FILTER_PROTO_TCPV4:
 			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_TCPV4;
 			break;
@@ -5948,22 +5992,34 @@ ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 			input.formatted.flow_type ^= IXGBE_ATR_FLOW_TYPE_UDPV4;
 			break;
 		default:
-			return (EINVAL);
+			error = EINVAL;
+			goto out;
 		}
-		common.port.src ^= htons(filter->src_port);
-		common.port.dst ^= htons(filter->dst_port);
+		common.port.src ^= htons(entry->filter.src_port);
+		common.port.dst ^= htons(entry->filter.dst_port);
 		common.flex_bytes ^= htons(ETHERTYPE_IP);
-		common.ip ^= filter->src_ip.s_addr ^ filter->dst_ip.s_addr;
+		common.ip ^= entry->filter.src_ip.s_addr
+			^ entry->filter.dst_ip.s_addr;
 
 		ixgbe_fdir_erase_signature_filter_82599(&adapter->hw,
 			input, common);
+
+		TAILQ_REMOVE(&adapter->filter_list, entry, link);
+		break;
+	}
+	case IXGBE_GET_SIGFILTER_LEN: {
+		unsigned *id = (unsigned *)data;
+		
+		*id = adapter->next_filter_id;
 		break;
 	}
 	default:
-		return (EOPNOTSUPP);
+		error = EOPNOTSUPP;
 		break;
 	}
 
-	return (0);
+out:
+	mtx_unlock(&adapter->filter_mtx);
+	return (error);
 }
 
