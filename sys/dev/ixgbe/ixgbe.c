@@ -201,9 +201,7 @@ static void	ixgbe_handle_msf(void *, int);
 static void	ixgbe_handle_mod(void *, int);
 
 #ifdef IXGBE_FDIR
-#ifdef IXGBE_FDIR_ATR
 static void	ixgbe_atr(struct tx_ring *, struct mbuf *);
-#endif
 static void	ixgbe_reinit_fdir(void *, int);
 #endif
 
@@ -333,7 +331,6 @@ static bool ixgbe_rsc_enable = FALSE;
 static int ixgbe_total_ports;
 
 #ifdef IXGBE_FDIR
-#ifdef IXGBE_FDIR_ATR
 /*
 ** For Flow Director: this is the
 ** number of TX packets we sample
@@ -344,7 +341,7 @@ static int ixgbe_total_ports;
 ** setting this to 0.
 */
 static int atr_sample_rate = 20;
-#endif
+TUNABLE_INT("hw.ixgbe.atr_sample_rate", &atr_sample_rate);
 /* 
 ** Flow Director actually 'steals'
 ** part of the packet buffer as its
@@ -1852,7 +1849,6 @@ retry:
 		return (error);
 	}
 
-#ifdef IXGBE_FDIR_ATR
 	/* Do the flow director magic */
 	if ((txr->atr_sample) && (!adapter->fdir_reinit)) {
 		++txr->atr_count;
@@ -1861,7 +1857,6 @@ retry:
 			txr->atr_count = 0;
 		}
 	}
-#endif
 
 	i = txr->next_avail_desc;
 	for (j = 0; j < nsegs; j++) {
@@ -3099,11 +3094,9 @@ ixgbe_setup_transmit_ring(struct tx_ring *txr)
 		txbuf->eop = NULL;
         }
 
-#ifdef IXGBE_FDIR_ATR
 	/* Set the rate at which we sample packets */
 	if (adapter->hw.mac.type != ixgbe_mac_82598EB)
 		txr->atr_sample = atr_sample_rate;
-#endif
 
 	/* Set number of descriptors available */
 	txr->tx_avail = adapter->num_tx_desc;
@@ -3519,7 +3512,6 @@ ixgbe_tso_setup(struct tx_ring *txr, struct mbuf *mp,
 	return (0);
 }
 
-#ifdef IXGBE_FDIR_ATR
 /*
 ** This routine parses packet headers so that Flow
 ** Director can make a hashed filter table entry 
@@ -3593,7 +3585,6 @@ ixgbe_atr(struct tx_ring *txr, struct mbuf *mp)
 	ixgbe_fdir_add_signature_filter_82599(&adapter->hw,
 	    input, common, que->msix);
 }
-#endif /* IXGBE_FDIR */
 
 /**********************************************************************
  *
@@ -5878,6 +5869,14 @@ ixgbe_extension_ioctl(struct cdev *dev, unsigned long cmd, caddr_t data,
 		return (EPERM);
 	}
 	
+	if (cmd == IXGBE_GET_ATR_SAMPLE_RATE) {
+		return (atr_sample_rate);
+	}
+
+	if (atr_sample_rate > 0) {
+		return (ENODEV);
+	}
+
 	mtx_lock(&adapter->filter_mtx);
 	switch (cmd) {
 	case IXGBE_ADD_SIGFILTER: {

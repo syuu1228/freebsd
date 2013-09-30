@@ -1668,10 +1668,9 @@ s32 ixgbe_fdir_add_signature_filter_82599(struct ixgbe_hw *hw,
 }
 
 /**
- *  ixgbe_fdir_erase_signature_filter_82599 - Adds a signature hash filter
+ *  ixgbe_fdir_erase_signature_filter_82599 - Erase a signature hash filter
  *  @hw: pointer to hardware structure
  *  @stream: input bitstream
- *  @queue: queue index to direct traffic to
  **/
 s32 ixgbe_fdir_erase_signature_filter_82599(struct ixgbe_hw *hw,
                                           union ixgbe_atr_hash_dword input,
@@ -1680,7 +1679,7 @@ s32 ixgbe_fdir_erase_signature_filter_82599(struct ixgbe_hw *hw,
 	u64  fdirhashcmd;
 	u32  fdircmd;
 
-	DEBUGFUNC("ixgbe_fdir_clear_signature_filter_82599");
+	DEBUGFUNC("ixgbe_fdir_erase_signature_filter_82599");
 
 	/*
 	 * Get the flow_type in order to program FDIRCMD properly

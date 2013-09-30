@@ -193,6 +193,12 @@ main(int argc, char *argv[])
 		perror("ixgbetool");
 		exit(1);
 	}
+	ret = ioctl(fd, IXGBE_GET_ATR_SAMPLE_RATE);
+	if (ret) {
+		printf("Before costomize signature filter, you need to add 'hw.ixgbe.atr_sample_rate=0' on /boot/loader.conf and reboot\n");
+		close(fd);
+		exit(1);
+	}
 	if (!strcmp(argv[2], "add_sig_filter"))
 		ret = add_sig_filter(fd, argc, argv);
 	else if (!strcmp(argv[2], "show_sig_filter"))
