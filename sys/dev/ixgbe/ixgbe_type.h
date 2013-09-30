@@ -2997,8 +2997,6 @@ struct ixgbe_hw_stats {
 	u64 qbtc[16];
 	u64 qprdc[16];
 	u64 pxon2offc[8];
-	u64 fdirfree_free;
-	u64 fdirfree_coll;
 	u64 fdirustat_add;
 	u64 fdirustat_remove;
 	u64 fdirfstat_fadd;
