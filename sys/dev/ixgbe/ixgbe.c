@@ -5666,28 +5666,28 @@ ixgbe_add_hw_stats(struct adapter *adapter)
 	/* fdir stats */
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfree_free",
 		CTLFLAG_RD, &stats->fdirfree_free,
-		"");
+		"Number of free filters");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfree_coll",
 		CTLFLAG_RD, &stats->fdirfree_coll,
-		"");
+		"Number of filters with collision indication");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirustat_add",
 		CTLFLAG_RD, &stats->fdirustat_add,
-		"");
+		"Number of added filters");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirustat_remove",
 		CTLFLAG_RD, &stats->fdirustat_remove,
-		"");
+		"Number of removed filters");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfstat_fadd",
 		CTLFLAG_RD, &stats->fdirfstat_fadd,
-		"");
+		"Number of filters addition events that do not change the number of free");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirfstat_fremove",
 		CTLFLAG_RD, &stats->fdirfstat_fremove,
-		"");
+		"Number of failed removed filters");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmatch",
 		CTLFLAG_RD, &stats->fdirmatch,
-		"");
+		"Number of packets that matched any flow director filter");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmiss",
 		CTLFLAG_RD, &stats->fdirmiss,
-		"");
+		"Number of packets that missed matched any flow director filter");
 }
 
 /*
