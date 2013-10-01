@@ -5687,7 +5687,7 @@ ixgbe_add_hw_stats(struct adapter *adapter)
 		"Number of packets that matched any flow director filter");
 	SYSCTL_ADD_UQUAD(ctx, stat_list, OID_AUTO, "fdirmiss",
 		CTLFLAG_RD, &stats->fdirmiss,
-		"Number of packets that missed matched any flow director filter");
+		"Number of packets that didn't match any flow director filter");
 }
 
 /*
