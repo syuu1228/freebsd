@@ -29,23 +29,15 @@ $FreeBSD$
 
 ***************************************************************************/
 
-#ifndef __IXGBEIOCTL_H__
-#define __IXGBEIOCTL_H__
+#ifndef __IXGBEUFILTER_H__
+#define __IXGBEUFILTER_H__
 
 enum {
-	IX_ADD_SIGFILTER = 0x0,
-	IX_GET_SIGFILTER,
-	IX_CLR_SIGFILTER,
-	IX_GET_SIGFILTER_LEN,
-	IX_GET_ATR_SAMPLE_RATE
+	UFILTER_PROTO_TCPV4,
+	UFILTER_PROTO_UDPV4
 };
 
-enum {
-	IXGBE_FILTER_PROTO_TCPV4,
-	IXGBE_FILTER_PROTO_UDPV4
-};
-
-struct ix_filter {
+struct ufilter_entry {
 	unsigned id;
 	int proto;
 	struct in_addr src_ip;
@@ -55,11 +47,45 @@ struct ix_filter {
 	int que_index;
 };
 
-#define IXGBE_ADD_SIGFILTER	_IOW('i', IX_ADD_SIGFILTER, struct ix_filter)
-#define IXGBE_GET_SIGFILTER	_IOWR('i', IX_GET_SIGFILTER, struct ix_filter)
-#define IXGBE_CLR_SIGFILTER	_IOW('i', IX_CLR_SIGFILTER, unsigned)
-#define IXGBE_GET_SIGFILTER_LEN _IOR('i', IX_GET_SIGFILTER_LEN, unsigned)
-#define IXGBE_GET_ATR_SAMPLE_RATE _IO('i', IX_GET_ATR_SAMPLE_RATE)
+#define IXGBE_ADD_SIGFILTER	_IOW('i', 0x0, struct ufilter_entry)
+#define IXGBE_GET_SIGFILTER	_IOWR('i', 0x1, struct ufilter_entry)
+#define IXGBE_CLR_SIGFILTER	_IOW('i', 0x2, unsigned)
+#define IXGBE_GET_SIGFILTER_LEN _IOR('i', 0x3, unsigned)
 
+#ifdef _KERNEL
+#include <sys/rmlock.h>
+
+struct ufilter_kentry {
+	struct ufilter_entry e;
+	TAILQ_ENTRY(ufilter_kentry) tq_link;
+	LIST_ENTRY(ufilter_kentry) li_link;
+#ifdef COOPERATIVE_ATR 
+	union ixgbe_atr_hash_dword input;
+	union ixgbe_atr_hash_dword common;
+	u32 hash;
 #endif
+};
+
+struct ixgbe_ufilter {
+	struct cdev		*cdev;
+	TAILQ_HEAD(, ufilter_kentry) list;
+	struct mtx		mtx;
+	unsigned		next_id;
+#ifdef COOPERATIVE_ATR 
+	LIST_HEAD(, ufilter_kentry) *hash;
+	u_long			hashmask;
+	struct rmlock		hashlock;
+#endif
+};
+
+#ifdef IXGBE_FDIR
+struct adapter;
+int ixgbe_ufilter_attach(struct adapter *adapter);
+int ixgbe_ufilter_detach(struct adapter *adapter);
+#ifdef COOPERATIVE_ATR 
+int ixgbe_ufilter_exists(struct adapter *adapter, u32 hash);
+#endif /* COOPERATIVE_ATR */
+#endif /* IXGBE_FDIR */
+#endif /* _KERNEL */
+#endif /* __IXGBEUFILTER_H__ */
 

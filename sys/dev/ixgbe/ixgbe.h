@@ -92,7 +92,7 @@
 #include <sys/priv.h>
 
 #include "ixgbe_api.h"
-#include "ixgbe_ioctl.h"
+#include "ixgbe_ufilter.h"
 
 /* Tunables */
 
@@ -472,15 +472,7 @@ struct adapter {
 
 	struct ixgbe_hw_stats 	stats;
 
-	struct cdev		*cdev;
-	TAILQ_HEAD(, ix_filter_entry) filter_list;
-	struct mtx		filter_mtx;
-	unsigned		next_filter_id;
-};
-
-struct ix_filter_entry {
-	TAILQ_ENTRY(ix_filter_entry) link;
-	struct ix_filter filter;
+	struct ixgbe_ufilter	ufilter;
 };
 
 /* Precision Time Sync (IEEE 1588) defines */
