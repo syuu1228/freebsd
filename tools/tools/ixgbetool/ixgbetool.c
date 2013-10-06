@@ -187,8 +187,8 @@ main(int argc, char *argv[])
 	int ifno;
 	int coop_atr;
 	int atr;
-	size_t coop_atr_size;
-	size_t atr_size;
+	size_t coop_atr_size = sizeof(coop_atr);
+	size_t atr_size = sizeof(atr);
 
 	if (argc < 3) {
 		usage();
@@ -213,7 +213,7 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 	if (!coop_atr && atr) {
-		printf("Before costomize signature filter, you need to add 'hw.ixgbe.atr_sample_rate=0' on /boot/loader.conf and reboot\n");
+		printf("To use user defined filter, you need to add 'hw.ixgbe.cooperative_atr=1' on /boot/loader.conf and reboot\n");
 		close(fd);
 		exit(1);
 	}
