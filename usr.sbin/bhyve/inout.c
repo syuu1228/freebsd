@@ -36,6 +36,7 @@ __FBSDID("$FreeBSD$");
 #include <string.h>
 #include <assert.h>
 
+#include "bhyverun.h"
 #include "inout.h"
 
 SET_DECLARE(inout_port_set, struct inout_port);
@@ -103,8 +104,11 @@ emulate_inout(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 
 	handler = inout_handlers[port].handler;
 
-	if (strict && handler == default_inout)
+	if (strict && handler == default_inout) {
+		fprintf(stderr, "%s vcpu:%d in:%d port:%x bytes:%d\n",
+			__func__, vcpu, in, port, bytes);
 		return (-1);
+	}
 
 	if (!in) {
 		switch (bytes) {
@@ -126,6 +130,86 @@ emulate_inout(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 
 	if ((in && (flags & IOPORT_F_IN)) || (!in && (flags & IOPORT_F_OUT)))
 		return ((*handler)(ctx, vcpu, in, port, bytes, eax, arg));
+	else {
+		fprintf(stderr, "%s vcpu:%d in:%d port:%x bytes:%d\n",
+			__func__, vcpu, in, port, bytes);
+		return (-1);
+	}
+}
+
+#define REP_OUTS_FUNC(type, bytes) \
+do { \
+	type *addr = paddr_guest2host(ctx, (uint32_t)*rsi, *rcx); \
+	int i, error; \
+	for (i = 0; i < *rcx / bytes; i++) { \
+		uint32_t eax = addr[i]; \
+		error = emulate_inout(ctx, vcpu, 0, port, bytes, &eax, \
+			strict); \
+		if (error) \
+			return (error); \
+	} \
+	return (0); \
+} while(0)
+
+static int
+emulate_rep_outsb(struct vmctx *ctx, int vcpu, int port, uint64_t *rcx,
+		  uint64_t *rsi, int strict)
+{
+	static const int bytes = 1;
+	int len = *rcx;
+	uintptr_t gaddr = *rsi;
+	uint8_t *haddr;
+	int i, error;
+
+	if ((gaddr & 0xffffffff00000000) == 0xffffffff00000000)
+		gaddr &= 0x00000000ffffffff; 
+	fprintf(stderr, "%s:%d gaddr=0x%lx\n", __func__, __LINE__, gaddr);
+	haddr = paddr_guest2host(ctx, gaddr, len);
+	if (!haddr)
+		fprintf(stderr, "%s:%d !haddr\n", __func__, __LINE__);
+	if (!haddr)
+		return (-1);
+	for (i = 0; i < len / 1; i++) {
+		uint32_t eax = haddr[i];
+		error = emulate_inout(ctx, vcpu, 0, port, bytes, &eax,
+			strict);
+		if (error)
+			fprintf(stderr, "%s:%d emulate_inout i=%d port=%x failed\n",
+				__func__, __LINE__, i, port);
+		if (error)
+			return (error);
+	}
+	return (0);
+//	REP_OUTS_FUNC(uint8_t, 1);
+}
+
+static int
+emulate_rep_outsw(struct vmctx *ctx, int vcpu, int port, uint64_t *rcx,
+		  uint64_t *rsi, int strict)
+{
+	REP_OUTS_FUNC(uint16_t, 2);
+}
+static int
+emulate_rep_outsd(struct vmctx *ctx, int vcpu, int port, uint64_t *rcx,
+		  uint64_t *rsi, int strict)
+{
+	REP_OUTS_FUNC(uint32_t, 4);
+}
+
+int
+emulate_rep_inouts(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
+		 uint64_t *rcx, uint64_t *rxi, int strict)
+{
+	int out = !in;
+
+	if (in)
+		return (-1);
+	else if (out && bytes == 1)
+		return emulate_rep_outsb(ctx, vcpu, port, rcx, rxi, strict);
+	else if (out && bytes == 2)
+		return emulate_rep_outsw(ctx, vcpu, port, rcx, rxi, strict);
+	else if (out && bytes == 4)
+		return emulate_rep_outsd(ctx, vcpu, port, rcx, rxi, strict);
 	else
 		return (-1);
 }

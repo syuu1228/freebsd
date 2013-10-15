@@ -49,6 +49,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/vmm.h>
 #include <vmmapi.h>
 
+#include <x86/psl.h>
+
 #include "bhyverun.h"
 #include "acpi.h"
 #include "inout.h"
@@ -185,6 +187,7 @@ fbsdrun_start_thread(void *param)
 	vm_loop(mtp->mt_ctx, vcpu, vmexit[vcpu].rip);
 
 	/* not reached */
+	fprintf(stderr, "%s:%d\n", __func__, __LINE__);
 	exit(1);
 	return (NULL);
 }
@@ -259,17 +262,57 @@ vmexit_inout(struct vmctx *ctx, struct vm_exit *vme, int *pvcpu)
 	in = vme->u.inout.in;
 	out = !in;
 
-	/* We don't deal with these */
-	if (vme->u.inout.string || vme->u.inout.rep)
-		return (VMEXIT_ABORT);
+	if (vme->u.inout.string && vme->u.inout.rep) {
+		uint64_t rcx, rxi, rflags;
+
+		if (vm_get_register(ctx, vcpu, VM_REG_GUEST_RFLAGS, &rflags))
+			return (VMEXIT_ABORT);
+		/* Don't support reverse direction */
+		if (rflags & PSL_D)
+			return (VMEXIT_ABORT);
+
+		if (vm_get_register(ctx, vcpu, VM_REG_GUEST_RCX, &rcx))
+			return (VMEXIT_ABORT);
+		if (vm_get_register(ctx, vcpu, 
+			in ? VM_REG_GUEST_RDI : VM_REG_GUEST_RSI, &rxi))
+			return (VMEXIT_ABORT);
+
+		fprintf(stderr, "%s:%d vcpu:%d in:%d port:%x bytes:%d rcx:%lx rxi:%lx\n",
+			__func__, __LINE__, vcpu, in, port, bytes, rcx, rxi); 
+
+		if (emulate_rep_inouts(ctx, vcpu, in, port, bytes, &rcx,
+			&rxi, strictio)) {
+			fprintf(stderr, "Unhandled rep %s%c 0x%04x\n",
+				in ? "ins" : "outs",
+				bytes == 1 ? 'b' : (bytes == 2 ? 'w' : 'l'), 
+				port);
+			return (vmexit_catch_inout());
+		}
+		if (vm_set_register(ctx, vcpu, VM_REG_GUEST_RCX, 0))
+			return (VMEXIT_ABORT);
+
+		if (vm_set_register(ctx, vcpu, 
+			in ? VM_REG_GUEST_RDI : VM_REG_GUEST_RSI, rxi + rcx))
+			return (VMEXIT_ABORT);
+
+		return (VMEXIT_CONTINUE);
+       /* We don't deal with these */
+	} else if (vme->u.inout.string || vme->u.inout.rep)
+               return (VMEXIT_ABORT);
 
 	/* Special case of guest reset */
-	if (out && port == 0x64 && (uint8_t)eax == 0xFE)
+	if (out && port == 0x64 && (uint8_t)eax == 0xFE) {
+		fprintf(stderr, "%s:%d vcpu:%d in:%d port:%x bytes:%d\n",
+			__func__, __LINE__, vcpu, in, port, bytes);
 		return (vmexit_catch_reset());
+	}
 
         /* Extra-special case of host notifications */
-        if (out && port == GUEST_NIO_PORT)
+        if (out && port == GUEST_NIO_PORT) {
+		fprintf(stderr, "%s:%d vcpu:%d in:%d port:%x bytes:%d\n",
+			__func__, __LINE__, vcpu, in, port, bytes);
                 return (vmexit_handle_notify(ctx, vme, pvcpu, eax));
+	}
 
 	error = emulate_inout(ctx, vcpu, in, port, bytes, &eax, strictio);
 	if (error == 0 && in)
@@ -461,6 +504,7 @@ vm_loop(struct vmctx *ctx, int vcpu, uint64_t rip)
 		case VMEXIT_RESET:
 			exit(0);
 		default:
+			fprintf(stderr, "%s:%d handler=%p rc=%d exitcode=%d vcpu=%d\n", __func__, __LINE__, handler[exitcode], rc, exitcode, vcpu);
 			exit(1);
 		}
 	}
@@ -657,5 +701,6 @@ main(int argc, char *argv[])
 	 */
 	mevent_dispatch();
 
+	fprintf(stderr, "%s:%d\n", __func__, __LINE__);
 	exit(1);
 }

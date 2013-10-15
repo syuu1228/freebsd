@@ -324,6 +324,8 @@ pci_emul_io_handler(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 			return (0);
 		}
 	}
+	fprintf(stderr, "%s vcpu:%d in:%d port:%x bytes:%d\n",
+		__func__, vcpu, in, port, bytes);
 	return (-1);
 }
 
